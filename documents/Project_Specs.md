@@ -1,52 +1,108 @@
-# SRS
+# Software Requirements Specification (SRS)
 
 ## Smart Cold Storage Monitor
 
-**Team:** [Team Name / Number]
+**Team:** TBD
 
 ### Team Members
 
-Not specified.
+To be determined.
 
 ---
 
 ## Problem Statement
 
-Cold storage facilities for perishable food and temperature-sensitive pharmaceuticals (e.g., vaccines, biologics, active pharmaceutical ingredients) face critical risks from unpredicted equipment failures, improper door handling, and undetected thermal drift. Conventional cold chain monitoring solutions rely either on manual, periodic temperature checks or reactive threshold alarms that notify operators only after an excursion has already breached critical limits. By that point, valuable inventory is frequently compromised or spoiled, resulting in severe financial loss, public health hazards, and regulatory violations. Furthermore, many legacy systems lack standardized, tamper-evident audit logging compliant with institutional standards, making it impossible to produce verifiable records of compliance, chain-of-custody, and corrective actions during inspections.
+Temperature fluctuations in cold storage environments can affect the quality and shelf life of perishable food products. Conventional temperature monitoring systems generally rely on fixed thresholds and alerts, which only identify problems after temperatures have exceeded acceptable limits.
 
----
+These systems also provide limited information about how historical temperature exposure affects stored products. Consequently, operators may struggle to predict temperature-related problems, identify potentially deteriorating products, and estimate their remaining shelf life.
+
+We propose an AI-powered cold storage monitoring system that analyzes historical temperature datasets, predicts future temperature conditions, and estimates food spoilage risk and remaining shelf life.
+
+The project will use publicly available Kaggle datasets rather than physical sensors, allowing development and evaluation of the predictive models without hardware dependencies.
 
 ## Objective / Goal
 
-The goal of this project is to build an intelligent, end-to-end cold storage monitoring platform that continuously tracks freezer temperatures and environmental metrics in real time. The platform integrates machine learning predictive spoilage models to forecast thermal deviations and impending compressor failures hours before threshold breaches occur. To ensure regulatory and enterprise compliance, the system is strictly aligned with the **NIST SP 800-53** security framework, implementing tamper-evident audit logging (Audit and Accountability - AU control family), robust access control, and cryptographic log verification for audit readiness.
+Develop a software-based cold storage monitoring and prediction platform with two primary AI modules:
 
----
+**Module 1: AI Temperature Forecasting**
+
+Analyze historical cold storage temperature records and predict future temperature changes. The module will identify potential temperature excursions before they occur and provide early warnings when forecast temperatures are expected to exceed configurable thresholds.
+
+**Module 2: AI Spoilage and Shelf-Life Prediction**
+
+Analyze temperature exposure history and food product characteristics to estimate product deterioration, potential spoilage risk, and remaining shelf life.
+
+The modules will be integrated into a Java-based application, enabling users to upload datasets, visualize temperature trends, generate predictions, and evaluate the potential impact of changing storage conditions on food products.
+
+Additional objectives include:
+
+- Apply machine learning to practical cold storage management problems.
+- Compare predictive models against baseline methods.
+- Provide clear visual explanations of predictions.
+- Maintain basic prediction and activity logs aligned with relevant NIST SP 800-53 auditing principles.
+- Minimize external services, deployment complexity, and hosting costs.
 
 ## One Use Case (Primary)
 
-**User:** Cold Storage Facility Operations Specialist / Quality Assurance Auditor
+**User:** Cold storage manager or facility operator
 
-1. Industrial IoT digital temperature sensors deployed inside vaccine storage freezers continuously stream temperature and humidity telemetry to the monitoring backend via secure MQTT.
-2. The system's predictive spoilage model evaluates sliding-window time-series data, comparing current compressor cycles, defrost intervals, and ambient drift against baseline patterns.
-3. The AI model detects an anomalous warming trend and predicts a temperature excursion exceeding the -20°C pharmaceutical safety limit within the next 3.5 hours.
-4. The system immediately triggers a high-severity predictive alarm, notifying the on-duty facility technician through the web dashboard and automated SMS/email alerts.
-5. In compliance with **NIST SP 800-53 (AU-2, AU-3, AU-6, AU-9)**, the platform automatically generates an immutable audit record capturing the event timestamp, sensor ID, anomaly confidence score, threshold limits, recipient of the alert, and full system state.
-6. The technician inspects the refrigeration unit, replaces a failing door gasket, and inputs the corrective action report directly into the dashboard.
-7. The quality assurance auditor reviews the incident timeline and exports a cryptographically verifiable audit log report for FDA cGMP and regulatory compliance filings.
+1. The user uploads a CSV dataset containing historical cold storage temperature records.
+2. The application validates and processes the dataset, identifying timestamps, temperature readings, and available environmental variables.
+3. The temperature forecasting module analyzes recent temperature trends and predicts temperature conditions over the next configurable period.
+4. The application displays historical and predicted temperatures on a graph, highlighting potential threshold violations.
+5. The user selects a food product, enters its relevant storage information, and associates it with a temperature history.
+6. The spoilage and shelf-life prediction module evaluates the product's historical temperature exposure and estimates its deterioration level or remaining shelf life, using an appropriate trained model.
+7. The application presents the predicted shelf-life estimate, supporting factors, and uncertainty or model limitations.
+8. The user can adjust future temperature scenarios to compare their potential effects on product shelf life.
+9. The application stores prediction results and relevant user actions for future review.
 
----
+All predictions are intended for educational and decision-support purposes, not for certifying food safety.
 
 ## Scope of the Project
 
-* Real-time telemetry ingestion and multi-point temperature/humidity tracking for food and pharma cold storage.
-* AI-driven predictive spoilage and thermal excursion forecasting using time-series anomaly detection.
-* NIST SP 800-53 compliant audit logging system with immutable records and role-separated access.
-* Proactive multi-channel alerting engine (SMS, email, dashboard notifications) with escalation workflows.
-* Dynamic inventory tolerance profiles mapped to storage units (e.g., Ultra-Low Temp -80°C freezers, standard -20°C pharma, 4°C food refrigeration).
-* Real-time interactive web dashboard with spatial equipment layouts, live thermal curves, and health score indicators.
-* Role-Based Access Control (RBAC) enforcing separation of duties (Operators, Maintenance Techs, Auditors, Administrators).
-* Automated compliance reporting and historical audit log export (PDF, CSV, JSON).
-* Device management interface for registering, calibrating, and managing IoT sensor nodes.
+### Module 1 — AI Temperature Forecasting
+
+- Historical temperature dataset upload and processing
+- Temperature data cleaning and missing-value handling
+- Time-series feature engineering
+- Machine learning model training and evaluation
+- Short-term temperature forecasting
+- Configurable prediction horizons
+- Detection of predicted temperature threshold violations
+- Historical and forecast temperature visualization
+- Comparison of forecast performance against baseline methods
+
+### Module 2 — AI Spoilage and Shelf-Life Prediction
+
+- Food product profile management
+- Association of products with historical temperature records
+- Analysis of cumulative temperature exposure
+- Food deterioration or spoilage-risk estimation
+- Remaining shelf-life prediction where suitable training labels or validated models are available
+- Comparison of different storage temperature scenarios
+- Visualization of predicted shelf-life changes
+- Presentation of prediction confidence, uncertainty, and limitations
+
+### General Application Features
+
+- Dataset upload and management
+- Interactive monitoring dashboard
+- Prediction history
+- Data visualization and reporting
+- Basic user activity and prediction logging
+- Integration between Java application components and Python ML services
+- Local execution with optional lightweight cloud deployment
+
+### Out of Scope
+
+- Physical temperature sensors or IoT integration
+- Actual refrigeration equipment control
+- Real-time environmental data collection
+- Pharmaceutical product stability certification
+- Commercial food safety certification
+- Fully automated food disposal decisions
+- Enterprise-scale cloud infrastructure
+- Continuous model retraining in production
 
 ---
 
@@ -54,48 +110,66 @@ The goal of this project is to build an intelligent, end-to-end cold storage mon
 
 ### Frontend
 
-* **Framework:** React.js with TypeScript
-* **UI Library:** Tailwind CSS and shadcn/ui
-* **State Management:** Redux Toolkit or Zustand
-* **Data Visualization:** Recharts or Chart.js (for real-time thermal curves, forecast bands, and sensor health charts)
+- **Language:** Java
+- **Framework:** JavaFX
+- **UI Components:** JavaFX controls and FXML
+- **Data Visualization:** JavaFX Charts
+- **Styling:** JavaFX CSS
 
 ### Backend
 
-* **Framework:** Python FastAPI or Node.js with Express.js
-* **API Architecture:** RESTful API with WebSockets for sub-second live telemetry updates
-* **Authentication & Security:** OAuth 2.0 with JWT, Role-Based Access Control (RBAC), and Argon2 / bcrypt hashing
+- **Language:** Java
+- **Framework:** Spring Boot
+- **API:** RESTful API
+- **Data Processing:** CSV parsing, validation, and data transformation
+- **ML Integration:** HTTP communication with Python prediction endpoints
 
 ### Database
 
-* **Time-Series Database:** TimescaleDB or InfluxDB (optimized for high-frequency sensor readings and thermal histories)
-* **Relational Database:** PostgreSQL (for user profiles, equipment registries, inventory metadata, and audit logs)
-* **Caching & Message Broker:** Redis (for live sensor state caching, rate limiting, and pub/sub messaging)
+- **Primary Database:** H2 or SQLite for lightweight local data storage
+- **Stored Information:** Dataset metadata, product profiles, prediction history, and audit records
 
 ### Machine Learning
 
-* **Language:** Python
-* **Libraries:** scikit-learn, PyTorch / TensorFlow, statsmodels
-* **Model:** Time-series forecasting and anomaly detection models (e.g., LSTM / Temporal Convolutional Networks or XGBoost) trained on cold chain thermal drift datasets and equipment degradation signatures
-* **Serving:** FastAPI microservice or TorchServe
+- **Language:** Python
+- **Libraries:** pandas, NumPy, scikit-learn, XGBoost
+- **Time-Series Modeling:** Feature-based regression and time-series forecasting methods
+- **Spoilage Modeling:** Regression or classification models, supplemented by scientifically supported deterioration models when appropriate
+- **Model Evaluation:** MAE, RMSE, and task-specific classification metrics
+- **Model Interface:** FastAPI
+- **Model Persistence:** joblib
 
-### External APIs & Hardware Integration
+### External Data Sources
 
-* **Sensor Protocols:** MQTT / HTTPS with TLS 1.3 encryption
-* **Edge Gateway / IoT Simulators:** ESP32 / Raspberry Pi gateway firmware supporting digital temperature probes (RTD / PT100 / DHT22)
-* **Notification Services:** Twilio API (SMS / Voice emergency alerts) and SendGrid API (email alerts and compliance digests)
+- **Primary Dataset Source:** Kaggle
+- **Temperature Data:** Publicly available refrigeration, cold storage, or comparable environmental temperature time-series datasets
+- **Spoilage Data:** Publicly available food freshness, spoilage, or shelf-life datasets with relevant labels
+- **Supplementary Scientific References:** Published food deterioration and microbial growth models, when needed to define or validate shelf-life estimation assumptions
+
+Final datasets will be selected after reviewing feature availability, target labels, data quality, and licensing.
 
 ### Development Tools
 
-* **Version Control:** Git with GitHub or GitLab
-* **Project Management:** Jira with Confluence
-* **CI/CD:** GitHub Actions
-* **Testing:** Pytest (backend & ML), Vitest / React Testing Library (frontend), Locust (telemetry load testing)
-* **Containerization:** Docker & Docker Compose
+- **Version Control:** Git and GitHub
+- **Project Management:** Jira or GitHub Projects
+- **Java IDE:** IntelliJ IDEA
+- **Python IDE:** VS Code or PyCharm
+- **Java Build Tool:** Maven or Gradle
+- **API Testing:** Postman
+- **Java Testing:** JUnit 5
+- **Python Testing:** pytest
+- **Optional Containerization:** Docker
 
-### Hosting/Deployment
+### Hosting / Deployment
 
-* **Cloud Platform:** AWS (EC2, S3, RDS, TimescaleDB, IoT Core) or Google Cloud Platform
-* **Web Server / Reverse Proxy:** Nginx with SSL/TLS termination
+- **Primary Deployment:** Local execution
+- **Frontend:** JavaFX desktop application
+- **Java Backend:** Locally hosted Spring Boot service
+- **Python ML Service:** Locally hosted FastAPI service
+- **Database:** Local H2 or SQLite instance
+- **Optional Cloud Hosting:** A single lightweight server or virtual machine for remote demonstrations
+
+Cloud hosting is not required for the core application.
 
 ---
 
@@ -103,55 +177,175 @@ The goal of this project is to build an intelligent, end-to-end cold storage mon
 
 ### User Interfaces
 
-* **Real-Time Overview Dashboard:** Facility overview showing monitored freezers, current temperatures, system health status, and live alarm banners.
-* **Detailed Unit Telemetry View:** Granular sensor data graphs displaying actual temperatures, predicted future trajectory, and defined critical tolerance bands.
-* **Predictive Risk & Spoilage Panel:** AI model outputs indicating risk percentages, estimated time-to-spoilage, and component failure warnings.
-* **NIST SP 800-53 Audit Log Portal:** Immutable audit log explorer featuring multi-parameter filtering (by event type, user, timestamp, sensor ID, or NIST control identifier) and export functionality.
-* **Asset & Inventory Profile Manager:** Interface to assign temperature tolerance parameters based on specific stored pharmaceuticals or food types.
-* **Settings & Security Management:** Configuration for RBAC user roles, MFA enforcement, alert escalation paths, and API integrations.
+**Dashboard**
+
+- Display historical storage temperatures.
+- Show predicted temperature trends.
+- Highlight forecast threshold violations.
+- Present an overview of associated products and prediction results.
+
+**Dataset Management Interface**
+
+- Upload CSV datasets.
+- Validate required columns and timestamps.
+- Preview uploaded records.
+- Display data quality issues and preprocessing summaries.
+- Select datasets for analysis.
+
+**Temperature Forecasting Interface**
+
+- Select historical dataset and forecasting period.
+- Generate temperature predictions.
+- Compare predicted and historical values.
+- Display predicted threshold violations and potential warning times.
+
+**Spoilage and Shelf-Life Prediction Interface**
+
+- Select food product or product category.
+- Enter available storage information and initial shelf life.
+- Associate the product with temperature history.
+- Generate deterioration or shelf-life estimates.
+- Visualize cumulative temperature effects.
+
+**Scenario Comparison Interface**
+
+- Modify hypothetical storage temperature conditions.
+- Compare predicted shelf-life outcomes between scenarios.
+- Identify which temperature conditions are associated with increased modeled deterioration.
+
+**Prediction History Interface**
+
+- Review previously generated predictions.
+- View associated model versions and inputs.
+- Review stored prediction and activity logs.
 
 ### Hardware Interfaces
 
-* **IoT Sensor Probes:** Calibrated temperature and humidity sensors connected via digital/analog interfaces (I2C, SPI, 1-Wire, Modbus).
-* **IoT Edge Gateway:** Microcontroller or industrial gateway running lightweight edge client to aggregate sensor metrics and securely push via MQTT over TLS 1.3.
-* **Client Devices:** Standard desktop and tablet/mobile web browsers for facility staff and field technicians.
+- Standard computer capable of running Java and Python applications
+- No external sensors, microcontrollers, or IoT devices required
+- No specialized GPU required for baseline machine learning models
 
 ### Software Interfaces
 
-* **IoT Telemetry Gateway:** MQTT / WebSocket interface over TLS 1.3 accepting structured JSON payloads of sensor readings.
-* **Machine Learning Inference Service:** Internal REST/gRPC API accepting windowed telemetry arrays and returning anomaly scores and time-to-excursion predictions.
-* **Audit Logging Engine (NIST SP 800-53 AU):** Dedicated backend logging service that generates tamper-evident logs, enforces write-once-read-many (WORM) constraints, and validates cryptographic checksums.
-* **Alert Dispatch Gateway:** Integration with external SMS (Twilio) and email (SendGrid) providers for rapid notification delivery.
+**Java Application to Java Backend**
+
+- Communication through RESTful API endpoints
+- JSON request and response format
+- Dataset uploads through multipart/form-data
+
+**Java Backend to Python ML Service**
+
+- HTTP REST API communication
+- JSON prediction requests and responses
+- Separate endpoints for temperature forecasting and spoilage prediction
+
+**Database Interface**
+
+- Java persistence layer for dataset metadata, product information, and prediction records
+- Local file storage for uploaded datasets and serialized ML models
 
 ---
 
 ## Functional Requirements
 
-* Ingest continuous temperature, humidity, and door-status telemetry at configurable intervals (e.g., 5 to 60 seconds).
-* Process streaming telemetry through AI models to predict temperature excursions and product spoilage risk ahead of real-time failures.
-* Record every critical system event into an immutable audit trail aligned with **NIST SP 800-53**:
-* Event types: user logins, threshold modifications, alert generations, technician acknowledgments, sensor calibrations, and system errors.
-* Required fields: timestamp (UTC), subject identifier (user or system), event category, outcome, sensor/asset identifier, and cryptographic record hash.
+### Module 1 — AI Temperature Forecasting
 
+**FR-01:** The system shall allow users to upload historical temperature datasets in CSV format.
 
-* Dispatch prioritized alerts based on predicted risk and actual threshold violations across multiple channels.
-* Provide configurable tolerance profiles for distinct storage categories (e.g., ultra-low biologics [-80°C], standard vaccines [-20°C], refrigerated produce [2°C–8°C]).
-* Support Role-Based Access Control (RBAC) to ensure strict separation of operational, maintenance, and audit review roles.
-* Generate automated, exportable compliance summary reports adhering to FDA/cGMP inspection standards.
+**FR-02:** The system shall validate dataset structure, including timestamps and temperature measurements.
+
+**FR-03:** The system shall preprocess temperature datasets by handling missing records, inconsistent intervals, and invalid measurements.
+
+**FR-04:** The system shall generate time-series features such as historical temperature lags, rolling averages, temperature changes, and available environmental variables.
+
+**FR-05:** The system shall train and evaluate at least one machine learning forecasting model.
+
+**FR-06:** The system shall generate temperature predictions for a configurable future period.
+
+**FR-07:** The system shall display historical and predicted temperature readings on a time-series graph.
+
+**FR-08:** The system shall allow users to configure acceptable temperature thresholds.
+
+**FR-09:** The system shall identify predicted threshold violations and display early warnings.
+
+**FR-10:** The system shall evaluate forecasting performance using MAE and RMSE against held-out chronological test data.
+
+### Module 2 — AI Spoilage and Shelf-Life Prediction
+
+**FR-11:** The system shall allow users to create and manage food product profiles.
+
+**FR-12:** The system shall allow users to associate food products with uploaded temperature records.
+
+**FR-13:** The system shall calculate relevant temperature-exposure features, including excursion duration, cumulative exposure, and temperature variability.
+
+**FR-14:** The system shall implement a spoilage-risk or shelf-life estimation model appropriate to the available dataset and scientifically justified modeling assumptions.
+
+**FR-15:** The system shall generate product deterioration estimates and, where supported, remaining shelf-life predictions.
+
+**FR-16:** The system shall display influential input factors and relevant prediction limitations.
+
+**FR-17:** The system shall allow users to compare alternative hypothetical storage temperature scenarios.
+
+**FR-18:** The system shall visually compare modeled deterioration or remaining shelf life between scenarios.
+
+**FR-19:** The system shall evaluate spoilage model performance against appropriate labeled test data, where ground-truth outcomes are available.
+
+### General System Requirements
+
+**FR-20:** The system shall provide an integrated dashboard for both prediction modules.
+
+**FR-21:** The system shall allow users to view and manage uploaded datasets.
+
+**FR-22:** The system shall record prediction requests, timestamps, model versions, and prediction results.
+
+**FR-23:** The system shall maintain basic audit records for relevant data-management actions and prediction events.
+
+**FR-24:** The system shall handle invalid datasets, unavailable models, and prediction errors gracefully.
+
+**FR-25:** The system shall support local execution without relying on paid cloud services.
 
 ---
 
 ## Non-Functional Requirements
 
-* **Latency:** Telemetry ingestion to live dashboard refresh latency must be under 2 seconds; predictive inference completed within 5 seconds of telemetry window receipt.
-* **Reliability & Availability:** System uptime target of 99.9% with local edge data buffering to prevent data loss during network disruptions.
-* **Security & Integrity (NIST SP 800-53 Alignment):**
-* Implementation of **AU-2** (Event Logging), **AU-3** (Content of Audit Records), **AU-6** (Audit Record Review, Analysis, and Reporting), and **AU-9** (Protection of Audit Information).
-* All telemetry in transit encrypted via TLS 1.3; data at rest encrypted using AES-256.
-* Audit logs are append-only with strict protection against modification or unauthorized deletion.
+### Performance
 
+- Prediction requests should complete within 5 seconds for representative preprocessed datasets under normal local operating conditions.
+- Dataset upload and preprocessing performance should be evaluated using defined sample file sizes.
+- The application should remain responsive during model inference and data visualization.
+- Model training should be performed separately from ordinary prediction requests.
 
-* **Usability:** Clean, high-contrast dashboard optimized for rapid assessment by facility personnel on desktop and mobile viewports.
+### Accuracy and Reliability
+
+- Temperature forecasting performance shall be evaluated using chronological training, validation, and testing splits.
+- Temperature predictions should outperform a persistence baseline where feasible.
+- Spoilage models shall be evaluated against independent labeled data when available.
+- Predictions based on synthetic labels or assumed deterioration formulas shall be clearly identified.
+- The system shall not present model outputs as definitive food safety assessments.
+
+### Usability
+
+- Provide an intuitive interface for users without machine learning expertise.
+- Clearly distinguish historical measurements from AI predictions.
+- Present temperatures in degrees Celsius.
+- Include understandable warning messages and prediction explanations.
+- Display missing-data warnings and unsupported-input errors.
+
+### Security and Auditability
+
+- Validate uploaded file types and contents.
+- Log significant user actions and prediction events.
+- Include event timestamps, event types, and relevant identifiers.
+- Prevent ordinary application users from modifying historical audit entries through the interface.
+- Apply applicable concepts from the NIST SP 800-53 Audit and Accountability control family.
+
+### Maintainability
+
+- Separate Java frontend, Java backend, and Python ML components.
+- Provide documented REST APIs.
+- Maintain versioned ML model artifacts.
+- Use modular components to support independent development and testing.
+- Keep application dependencies and deployment requirements minimal.
 
 ---
 
@@ -159,57 +353,94 @@ The goal of this project is to build an intelligent, end-to-end cold storage mon
 
 ### 1. Planning and Design (2 weeks)
 
-**Week 1-2:**
+**Week 1–2:**
 
-* Set up development tools and communication repositories (Git, Jira, Confluence).
-* Finalize system architecture and NIST SP 800-53 compliance mapping document.
-* Design database schema (TimescaleDB hypertable for metrics + PostgreSQL relational schema for audit logs and entities).
-* Define IoT data ingestion contracts and MQTT message payload formats.
-* Create UI/UX wireframes and dashboard mockups.
+- Finalize software requirements and project scope.
+- Research suitable Kaggle temperature and food spoilage datasets.
+- Verify available target labels for shelf-life modeling.
+- Select initial machine learning approaches.
+- Design application architecture and database schema.
+- Define Java–Python API contracts.
+- Create JavaFX interface mockups.
+- Set up GitHub repository and project management tools.
 
-### 2. Development - Core Features & Ingestion (2 weeks)
+### 2. Development — Core Features (2 weeks)
 
-**Week 3-4:**
+**Week 3–4:**
 
-* Set up frontend application shell and component libraries.
-* Implement user authentication, session security, and Role-Based Access Control (RBAC).
-* Build backend API endpoints and integrate the PostgreSQL database.
-* Configure MQTT broker and build telemetry ingestion pipeline with TimescaleDB.
-* Develop the core live dashboard for real-time temperature graphing and asset status visualization.
+- Implement JavaFX application structure.
+- Set up Spring Boot backend.
+- Create FastAPI ML service.
+- Implement database integration.
+- Develop CSV upload and validation functionality.
+- Implement temperature history visualization.
+- Create basic food product management functionality.
+- Establish communication between Java backend and Python ML service.
 
-### 3. Development - AI Models & Audit Logging (3 weeks)
+### 3. Machine Learning and Application Development (3 weeks)
 
-**Week 5-6:**
+**Week 5–6:**
 
-* Implement the NIST SP 800-53 audit logging microservice (tamper-evident records, cryptographic hashing, and automated event capture).
-* Develop and train the AI predictive spoilage and thermal drift time-series models in Python.
-* Deploy ML inference endpoint and connect prediction pipelines to the ingestion stream.
-* Implement the threshold and predictive multi-channel alerting service (SMS/Email/In-App).
+- Clean and preprocess selected datasets.
+- Implement temperature forecasting baseline.
+- Train and evaluate temperature forecasting model.
+- Implement temperature forecasting API.
+- Develop threshold warning functionality.
+- Implement spoilage dataset preprocessing and feature engineering.
+- Develop initial spoilage or shelf-life estimation model.
+- Evaluate models against suitable baselines.
 
 **Week 7:**
 
-* Build the NIST SP 800-53 audit log explorer and compliance report generation module.
-* Implement storage profile configuration (food vs. pharmaceutical temperature bands).
-* Integrate alert acknowledgment and corrective action workflow forms.
+- Integrate spoilage prediction API.
+- Develop shelf-life visualization.
+- Implement temperature scenario comparison.
+- Add prediction history and audit logging.
+- Integrate results from both prediction modules into the dashboard.
 
 ### 4. Testing and Quality Assurance (2 weeks)
 
 **Week 8:**
 
-* Conduct end-to-end integration and API test suites.
-* Perform load and stress testing on telemetry ingestion pipelines simulating multiple concurrent freezer nodes.
-* Validate machine learning model inference accuracy and false-alarm rates using synthetic drift datasets.
+- Java unit testing.
+- Python model testing.
+- REST API integration testing.
+- Dataset validation and error-handling tests.
+- Verification of prediction logging.
+- Evaluate forecasting and spoilage models using held-out data.
 
 **Week 9:**
 
-* Perform security and NIST SP 800-53 audit compliance validation (testing log immutability, role isolation, and access controls).
-* Conduct User Acceptance Testing (UAT) for facility monitoring workflows.
-* Bug fixing, performance optimizations, and UI polish.
+- End-to-end system testing.
+- Usability testing.
+- Performance testing.
+- Resolve integration issues.
+- Improve model evaluation and visualization.
+- Prepare demonstration scenarios.
 
 ### 5. Deployment and Documentation (1 week)
 
 **Week 10:**
 
-* Deploy containerized services to production cloud infrastructure (AWS/GCP).
-* Finalize complete documentation (API reference, NIST alignment compliance report, and operator user manual).
-* Record demonstration walkthrough and prepare final project presentation.
+- Finalize local application deployment.
+- Optionally deploy backend services to a lightweight cloud instance.
+- Prepare installation and configuration instructions.
+- Document datasets, model assumptions, and evaluation results.
+- Finalize API documentation and user manual.
+- Create demo video and project presentation.
+- Submit final application and documentation.
+
+---
+
+## Expected Deliverables
+
+1. JavaFX desktop application with integrated dashboard.
+2. Spring Boot backend with dataset and prediction management APIs.
+3. Python temperature forecasting model.
+4. Python spoilage and shelf-life estimation model.
+5. FastAPI prediction service connecting the ML modules to the Java backend.
+6. Kaggle dataset preprocessing and training scripts.
+7. Model evaluation results and baseline comparisons.
+8. Temperature visualization, spoilage estimation, and scenario comparison interfaces.
+9. Basic prediction history and audit logging functionality.
+10. Source code, SRS, technical documentation, and demonstration materials.

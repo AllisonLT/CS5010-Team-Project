@@ -9,4 +9,6 @@ Members:
 
 **Smart Cold Storage Monitor** is a web-based system that monitors simulated freezers and refrigerators, warns staff before a unit leaves its safe temperature range, and keeps a tamper-evident audit log of every alert and response.
 
-See [SRS.md](SRS.md) for the full Software Requirements Specification.
+See `CS5010 Project Spec.pdf` for the full Software Requirements Specification.
+
+See `PROJECT_TIMELINE.md` for the milestone plan.

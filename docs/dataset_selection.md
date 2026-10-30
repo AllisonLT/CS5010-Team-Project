@@ -30,17 +30,25 @@ Briefly justify selection:
 ## 2) License and access conditions
 
 - **License name:** `Creative Commons Attribution 4.0 International`
-- **License URL/text reference:** `<URL>`
-- **Commercial use allowed?:** `<Yes/No/Unknown>`
-- **Modification allowed?:** `<Yes/No/Unknown>`
-- **Redistribution allowed?:** `<Yes/No/Unknown>`
-- **Attribution requirements:** `<required text/format>`
-- **Access constraints:** `<account needed? API key? terms acceptance?>`
+- **License URL/text reference:** [CC BY 4.0 summary](https://creativecommons.org/licenses/by/4.0/) and [full legal text](https://creativecommons.org/licenses/by/4.0/legalcode.en).
+- **Commercial use allowed?:** Yes, subject to the license conditions.
+- **Modification allowed?:** Yes, including cleaning, filtering, resampling, and creating derived datasets.
+- **Redistribution allowed?:** Yes, including original files and representative samples, subject to attribution and the other license conditions.
+- **Attribution requirements:** Credit Elia Henrichs, Florian Stoll, and Christian Krupitzer; identify the dataset and link to its DOI; link to CC BY 4.0; and indicate any changes, retaining notices of earlier modifications. Retain any supplied copyright, license, and warranty-disclaimer notices. Attribution may use any reasonable format, but must not imply author endorsement.
+- **Access constraints:** Open access. Public file downloads require no account, API key, or separate terms-acceptance step; reuse remains subject to CC BY 4.0.
+- **Verification evidence (2026-10-29):** The [Zenodo record metadata](https://zenodo.org/api/records/15130001) identifies version `v1`, license `cc-by-4.0`, and access right `open`. A [direct CSV download](https://zenodo.org/records/15130001/files/experiment_actions.csv?download=1) was accessible without authentication.
+
+### Attribution text for project use
+For unmodified files:
+
+> Henrichs, Elia; Stoll, Florian; and Krupitzer, Christian (2025). Temperature and Humidity Time Series of Cold Storage Room Monitoring (v1) [Dataset]. Zenodo. https://doi.org/10.5281/zenodo.15130001. Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0): https://creativecommons.org/licenses/by/4.0/. No changes made by this project.
+
+For a modified sample, use the same credit and replace the final sentence with an accurate description of the actual changes (for example, row selection or timestamp normalization).
 
 ### Compliance notes for this project
-State how your use complies with license terms:
-- `<note>`
-- `<note>`
+- Retrieve and analyze the data under CC BY 4.0. When adding a sample in Section 5.1, accompany it with the attribution above and describe the exact selection and preprocessing steps; do not label modified data as unchanged.
+- Keep the dataset's license and attribution distinct from the project's software license. Preserve supplied notices and do not impose additional legal restrictions or technological measures that restrict recipients' licensed reuse of the data.
+- Redistribution is permitted, so Section 5.1 is the applicable representative-input option. The sample and its provenance still need to be prepared; this license review does not complete that work.
 
 ---
 

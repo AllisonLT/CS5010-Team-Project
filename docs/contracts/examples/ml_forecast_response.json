@@ -1,0 +1,32 @@
+{
+  "sensor_id": "SENSOR02",
+  "origin_timestamp": "2024-09-09T14:00:00",
+  "current_temperature": 7.5,
+  "threshold": 10.0,
+  "currently_above_threshold": false,
+  "predictions": [
+    {
+      "horizon_minutes": 15,
+      "target_timestamp": "2024-09-09T14:15:00",
+      "predicted_temperature": 7.6,
+      "predicted_peak_temperature": 9.65,
+      "predicted_threshold_crossing": false,
+      "method": "damped_trend",
+      "peak_method": "future_peak_quantile_0.9"
+    },
+    {
+      "horizon_minutes": 30,
+      "target_timestamp": "2024-09-09T14:30:00",
+      "predicted_temperature": 7.75,
+      "predicted_peak_temperature": 13.5,
+      "predicted_threshold_crossing": true,
+      "method": "damped_trend",
+      "peak_method": "future_peak_quantile_0.9"
+    }
+  ],
+  "predicted_min_temperature": 7.6,
+  "predicted_max_temperature": 7.75,
+  "min_max_scope": "requested_horizon_point_forecasts_only",
+  "unit": "source_csv_unit_unconfirmed",
+  "warning_note": "Upper-quantile peak is not a calibrated crossing probability or safety guarantee"
+}

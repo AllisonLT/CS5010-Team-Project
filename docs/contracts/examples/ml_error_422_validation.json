@@ -1,0 +1,10 @@
+{
+  "detail": [
+    {
+      "type": "value_error",
+      "loc": ["body", "history"],
+      "msg": "Value error, Most recent 61 readings must be consecutive one-minute observations",
+      "input": []
+    }
+  ]
+}

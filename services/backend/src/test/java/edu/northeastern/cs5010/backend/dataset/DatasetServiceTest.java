@@ -41,7 +41,8 @@ class DatasetServiceTest {
 
     private DatasetStorage storage() {
         return new DatasetStorage(new AppProperties(
-                new AppProperties.Ml(URI.create("http://127.0.0.1:8000"), Duration.ofSeconds(1), Duration.ofSeconds(4)),
+                new AppProperties.Ml(URI.create("http://127.0.0.1:8000"), Duration.ofSeconds(1), Duration.ofSeconds(4),
+                        List.of("SENSOR01")),
                 new AppProperties.Storage(uploads.toString(), 1024)));
     }
 

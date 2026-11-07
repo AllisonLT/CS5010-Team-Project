@@ -10,7 +10,11 @@ def test_health_endpoint_returns_service_identity():
     assert response.json() == {"status": "ok", "service": "ml"}
 
 
-def test_unimplemented_predictions_are_not_successful():
+def test_predictions_reject_invalid_payload():
     with TestClient(app) as client:
-        response = client.post("/api/v1/predictions/temperature", json={})
-    assert response.status_code == 404
+        response = client.post(
+            "/api/v1/predictions/temperature",
+            json={}
+        )
+
+    assert response.status_code == 422

@@ -1,19 +1,47 @@
+# Documents
 *.pdf
 *.pptx
+
+# Java / Maven
 **/target/
+
+# Python
 **/__pycache__/
 **/*.egg-info/
+*.py[cod]
+**/.pytest_cache/
 .venv/
 .conda-env/
-**/.pytest_cache/
+
+# Python tooling
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Environment and IDE
 .env
 .idea/
 *.iml
+
+# Local datasets
 data/raw/*
 !data/raw/.gitkeep
+
 data/processed/*
 !data/processed/.gitkeep
+
 data/uploads/*
 !data/uploads/.gitkeep
+
+# Trained model artifacts
 models/artifacts/*
 !models/artifacts/.gitkeep
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db

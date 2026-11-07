@@ -1,0 +1,30 @@
+{
+  "category": "FRESH_POULTRY_AEROBIC",
+  "history_start": "2024-09-08T18:05:00",
+  "history_end": "2024-09-10T02:45:00",
+  "future_temperature_c": 4.0,
+  "remaining_shelf_life_hours": 64.3,
+  "shelf_life_used_fraction": 0.72,
+  "spoilage_risk": "medium",
+  "estimated_log_count": 5.6,
+  "past_spoilage_level": false,
+  "factors": {
+    "minutes_above_4c": 1730,
+    "peak_temperature_c": 21.9,
+    "mean_temperature_c": 9.8,
+    "growth_share_above_4c": 0.91
+  },
+  "interpolated_minutes": 3,
+  "flags": [],
+  "limitations": [
+    "Modeled estimate for fresh poultry in aerobic storage. Not a food safety determination.",
+    "Based on air temperature in the storage room, not product temperature."
+  ],
+  "model": {
+    "name": "pseudomonads_square_root",
+    "version": "tsaloumi2022-v1",
+    "citation_doi": "10.1016/j.psj.2022.101985",
+    "parameters": { "b": 0.022, "tmin_c": -6.18, "spoilage_log_count": 7.0 }
+  },
+  "unit": "celsius"
+}

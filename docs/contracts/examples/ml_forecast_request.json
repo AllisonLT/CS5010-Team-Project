@@ -1,0 +1,9 @@
+{
+  "sensor_id": "SENSOR02",
+  "threshold": 10.0,
+  "horizons_minutes": [15, 30],
+  "history": [
+    { "timestamp": "2024-09-09T13:59:00", "temperature": 7.4, "humidity": 71.0 },
+    { "timestamp": "2024-09-09T14:00:00", "temperature": 7.5, "humidity": 71.2 }
+  ]
+}

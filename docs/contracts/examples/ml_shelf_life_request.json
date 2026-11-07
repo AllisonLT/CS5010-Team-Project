@@ -1,0 +1,11 @@
+{
+  "category": "FRESH_POULTRY_AEROBIC",
+  "initial_log_count": 2.0,
+  "physiological_state_alpha0": 1.0,
+  "future_temperature_c": 4.0,
+  "interval_minutes": 1,
+  "history": [
+    { "timestamp": "2024-09-08T18:05:00", "temperature_c": 6.2 },
+    { "timestamp": "2024-09-08T18:06:00", "temperature_c": null }
+  ]
+}

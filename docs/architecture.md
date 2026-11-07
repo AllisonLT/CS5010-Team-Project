@@ -59,13 +59,13 @@ no inference client or storage implementation consumes them yet.
 
 | Issue | Deliverable still requiring design/review |
 |---|---|
-| #2 | Screen wireframes, navigation, validation states, and limitations text. |
-| #15 | MongoDB collection schemas, identifiers/references, CSV lifecycle, failed-upload cleanup. |
-| #16 | Versioned Java/Python contracts with timestamps, Celsius units, supported horizons, thresholds, success/error examples, and model limitations. |
+| #2 | Screen wireframes, navigation, validation states, and limitations text. Proposed in `docs/wireframes.md`. |
+| #15 | MongoDB collection schemas, identifiers/references, CSV lifecycle, failed-upload cleanup. Proposed in `docs/data_model.md`. |
+| #16 | Versioned Java/Python contracts with timestamps, Celsius units, supported horizons, thresholds, success/error examples, and model limitations. Proposed in `docs/api_contracts.md`. |
 | #17 | Each contributor must independently run the starters; this scaffold does not establish teammate acceptance. |
 | #18 | Push the branch and confirm actual GitHub Actions checks, including failure propagation. |
-| #19 | AU-2/AU-3/AU-9/AU-12 events, automatic generation, required fields, separate audit storage, and normal-application modification restrictions. |
-| #20 | Dataset sizes, horizons, product inputs, machine configuration, and end-to-end timing for the five-second prediction requirement, excluding offline training. |
+| #19 | AU-2/AU-3/AU-9/AU-12 events, automatic generation, required fields, separate audit storage, and normal-application modification restrictions. Proposed in `docs/audit_controls.md`. |
+| #20 | Dataset sizes, horizons, product inputs, machine configuration, and end-to-end timing for the five-second prediction requirement, excluding offline training. Proposed in `docs/latency_workload.md`. |
 
 M1 feasibility and supported product/model decisions remain prerequisites for
 final prediction contracts. Do not invent supported shelf-life outputs or accuracy

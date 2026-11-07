@@ -1,8 +1,10 @@
 package edu.northeastern.cs5010.backend.api;
 
+import edu.northeastern.cs5010.backend.audit.AuditService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -13,6 +15,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class HealthControllerTest {
     @Autowired
     private MockMvc mvc;
+
+    @MockitoBean
+    private AuditService audit;
 
     @Test
     void healthEndpointReturnsServiceIdentity() throws Exception {

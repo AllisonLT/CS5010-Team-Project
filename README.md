@@ -75,6 +75,13 @@ docker compose version
 
 Ensure Docker Desktop is running before starting MongoDB. On macOS, if `python3.11` is unavailable, install Python 3.11 and ensure its executable is on `PATH` (e.g., `brew install python@3.11`).
 
+On macOS, Homebrew's `openjdk@21` is not linked onto `PATH` by default, so `java -version` may report another version or none. Point `JAVA_HOME` at it in each terminal that runs Maven (or add these lines to `~/.zshrc`):
+
+```bash
+export JAVA_HOME="$(brew --prefix openjdk@21)"
+export PATH="$JAVA_HOME/bin:$PATH"
+```
+
 ### 2. Clone the Repository
 
 **Windows / macOS**
@@ -308,9 +315,9 @@ A healthy `/api/v1/health` response alone does **not** mean that the saved ML mo
 
 In the JavaFX application:
 
-1. Upload a supported sensor CSV through the **Datasets** screen and allow processing to complete.
+1. On the **Datasets** screen, click **Upload CSV…** and choose a source file such as `data/raw/SENSOR02_preprocessed.csv`. The sensor ID is read from the filename, so keep the `SENSORxx` part; if the filename has no sensor ID, the app asks for one. Wait until the dataset shows **READY**.
 2. Open **Forecast** and choose the uploaded **READY** dataset and its sensor (`SENSOR01`, `SENSOR02`, or `SENSOR04`).
-3. Select the forecast origin (latest valid window or a specific timestamp), horizons (15/30/60 minutes), and temperature threshold.
+3. Under **Forecast from**, choose **Latest available** or **Choose time** (format `yyyy-MM-dd HH:mm`, e.g. `2024-09-09 14:00`), then select horizons (15/30/60 minutes) and a temperature threshold in °C.
 4. Click **Run forecast** to request a real prediction via JavaFX → Spring Boot → FastAPI.
 5. Check the displayed point forecasts, future-peak estimates, threshold warnings, and (when available) observed temperatures.
 
@@ -356,7 +363,7 @@ For further configuration and troubleshooting, see [`docs/development.md`](docs/
 
 ## Progress So Far
 
-The following statuses summarize implementation against the **Phase 1 SRS functional requirements**. "Complete" refers to the presence of the feature and its focused checks in the repository; a separate real-world end-to-end walkthrough has not yet been confirmed.
+The following statuses summarize implementation against the **Phase 1 SRS functional requirements**. "Complete" refers to the presence of the feature and its focused checks in the repository. The temperature forecast path was run end to end on one machine on November 7, 2026 (real SENSOR02 upload, trained artifacts, JavaFX → Spring Boot → FastAPI, plus ML-service-down and unsupported-sensor errors); a full team walkthrough is still pending.
 
 | Functional Requirement (from Phase 1) | Status | Notes |
 |---|---|---|
@@ -412,7 +419,7 @@ Results above come from the [November 7, 2026 successful CI run](https://github.
 
 ## Next Steps
 
-- Complete verification of the temperature forecasting workflow using real CSV uploads and saved ML artifacts, including service failure handling.
+- Repeat the temperature forecasting walkthrough on every team member's machine and add the remaining failure scenarios (e.g., MongoDB unavailable, corrupted artifacts).
 - Finalize approval and implement the supported spoilage/shelf-life estimation method, product profiles, and temperature-history association.
 - Implement the desktop **Shelf Life**, **Prediction History**, and **Audit Log** screens and connect them to backend persistence and inference.
 - Finish held-out model evaluation, measured prediction latency, audit-control checks, and end-to-end regression testing.
@@ -424,5 +431,5 @@ Results above come from the [November 7, 2026 successful CI run](https://github.
 |---|---|
 | **Zi Ye** | Managed GitHub issues, milestone planning, and team progress tracking; established the repository architecture, development environment, and CI workflow; researched and documented dataset selection; contributed to full-stack development and project documentation. |
 | **Leyang Pan** | Developed and evaluated the temperature forecasting pipeline, including preprocessing and model training; implemented predictive threshold warnings and FastAPI inference endpoints; wrote Python tests, evaluation reports, and ML/Overall documentation. |
-| **Bo Sun** | Developed the JavaFX frontend, Spring Boot backend, and MongoDB persistence workflows; implemented CSV processing, dataset management, ML API integration, and audit logging; wrote Java unit and integration tests and technical design documentation. |
+| **Bo Sun** | Revised the SRS; wrote API contract, data model, audit-control, and shelf-life feasibility docs; built the backend CSV upload/resampling, audit logging, and ML forecast integration, plus the JavaFX Datasets and Forecast screens; wrote Java unit, integration, and contract tests. |
 

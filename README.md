@@ -1,123 +1,428 @@
-# Project
+# Smart Cold Storage Monitor
 
-Members:
-- Zi Ye <ye.z8@northeastern.edu>
-- Leyang Pan <yangplypan@gmail.com>
-- Bo sun <sun.b2@northeastern.edu>
+Smart Cold Storage Monitor is a local desktop application for cold-storage managers who need to monitor historical temperature conditions and identify possible temperature excursions before they occur. Users can upload sensor CSV datasets, inspect processed measurements, and request short-term temperature forecasts and predictive threshold warnings. The system uses a **JavaFX** desktop UI, a **Spring Boot** REST backend, a **Python FastAPI** forecasting service, and **MongoDB** for application metadata, prediction records, and audit logs. Food spoilage-risk and remaining shelf-life estimation are part of the planned second module and are not yet implemented.
 
-## Project Description
+## Team
 
-**Smart Cold Storage Monitor** is a single-user local desktop application for
-temperature forecasting and food spoilage/shelf-life estimation from CSV datasets.
-JavaFX provides the UI, Spring Boot owns application logic and persistence, and
-Python FastAPI serves ML inference. MongoDB stores metadata, products, prediction
-history, and separate audit records; CSV files remain on the local filesystem.
+| Member | GitHub Username | Role |
+|---|---|---|
+| Zi Ye | [@AllisonLT](https://github.com/AllisonLT) | Fullstack Developer |
+| Leyang Pan | [@YuanSu526](https://github.com/YuanSu526) | ML Developer |
+| Bo Sun | [@qianxi66](https://github.com/qianxi66) | Fullstack Developer |
 
-This repository currently contains development starters, not working forecasting
-or spoilage models. Live sensors, cloud deployment, accounts/RBAC, storage-scenario
-comparisons, and hash-chain/certification requirements are outside the scope.
+## Repository Structure
 
-## Dependency requirements
-
-### OS packages (apt)
-
-On an apt-based Linux distribution whose repositories provide JDK 21 and Python
-3.11 or newer, copy this package list into `apt-packages.txt`:
+The repository separates the JavaFX UI, Java backend, and Python ML service, consistent with the Phase 1 system architecture.
 
 ```text
-openjdk-21-jdk
-python3
-python3-venv
-python3-pip
+CS5010-Team-Project/
+├── apps/
+│   └── desktop/              JavaFX desktop application and UI tests
+├── services/
+│   ├── backend/              Spring Boot REST API, CSV handling, MongoDB integration, JUnit tests
+│   └── ml/                   FastAPI inference, ML preprocessing/training scripts, pytest tests
+├── data/
+│   ├── raw/                  Downloaded source CSV datasets (not committed)
+│   ├── processed/            Generated ML training/validation/test data (not committed)
+│   ├── uploads/              CSV files managed by the backend (not committed)
+│   └── sample/               Sample-data directory
+├── models/
+│   └── artifacts/            Saved ML artifacts (not committed)
+├── docs/                     Architecture, API contracts, model reports, and development guides
+├── .github/workflows/        GitHub Actions build/test pipeline
+├── compose.yaml              Local MongoDB service configuration
+├── pom.xml                   Parent Maven project
+├── PROJECT_TIMELINE.md       Milestone plan and acceptance criteria
+└── README.md                 Project overview and local setup instructions
 ```
 
-Install the list with:
+## Setup and Run
+
+This section describes how to build, run, and test the Smart Cold Storage Monitor locally on **Windows (PowerShell)** and **macOS (Terminal)**. The application consists of a JavaFX desktop UI, a Spring Boot backend, a Python FastAPI forecasting service, and MongoDB. Run all commands from the **repository root** unless otherwise noted.
+
+### 1. Prerequisites
+
+Install the following before proceeding:
+
+| Requirement | Version / Notes |
+| --- | --- |
+| Git | Any recent version |
+| JDK | **Java 21** (set `JAVA_HOME` to the JDK) |
+| Python | **Python 3.11** recommended (the project's tested baseline) |
+| Maven | No separate installation required; use the included Maven Wrapper (`mvnw.cmd` / `mvnw`) |
+| Docker Desktop | Docker Engine and Compose v2, for local **MongoDB 7** (or install MongoDB 7 locally instead) |
+| Desktop | A graphical desktop environment is required for JavaFX |
+
+Verify the required tools:
+
+**Windows — PowerShell**
+
+```powershell
+git --version
+java -version
+py -3.11 --version
+docker compose version
+```
+
+**macOS — Terminal**
 
 ```bash
-sudo apt-get update
-xargs -r sudo apt-get install -y < apt-packages.txt
+git --version
+java -version
+python3.11 --version
+docker compose version
 ```
 
-Package availability depends on the distribution/release; `python3` must resolve
-to version 3.11 or newer. These apt commands are for Linux, not Windows/macOS.
-For Windows or Conda setup, see [local setup](docs/development.md).
+Ensure Docker Desktop is running before starting MongoDB. On macOS, if `python3.11` is unavailable, install Python 3.11 and ensure its executable is on `PATH` (e.g., `brew install python@3.11`).
 
-Additional requirements:
+### 2. Clone the Repository
 
-- JDK 21: set `JAVA_HOME` to your own JDK installation; a JRE alone is insufficient.
-- Python 3.11 or newer: 3.11 is the CI/Conda baseline; use standard CPython or Conda, not MSYS2/MinGW Python.
-- Maven 3.9.11: downloaded by the wrapper; no global Maven installation is needed.
-- MongoDB 7.0: install using MongoDB's distribution-specific instructions, or use the supplied `mongo:7.0` container.
-- Docker Engine/Desktop and Compose v2: only required for the container option; Docker must be running.
-- A graphical desktop session: required to open JavaFX; headless CI only compiles the UI.
+**Windows / macOS**
 
-MongoDB and Docker are not included in the generic apt list because their packages
-and repository setup depend on the Linux distribution.
+```bash
+git clone https://github.com/AllisonLT/CS5010-Team-Project.git
+cd CS5010-Team-Project
+git switch main
+git pull origin main
+```
 
-Internet access is required for initial dependency downloads. Default local ports
-are `8080` (backend), `8000` (ML), and `27017` (MongoDB); they must be available or
-configured differently as described in [local setup](docs/development.md).
+If the repository is already cloned, open it and run `git switch main` followed by `git pull origin main` instead.
 
-### Java libraries
+### 3. Set Up the Python ML Environment
 
-Maven will install these automatically from `pom.xml`
+Create a Python 3.11 virtual environment and install the ML package and its test dependencies.
 
-- `org.openjfx:javafx-controls:21.0.9`
-- `org.springframework.boot:spring-boot-starter-web:3.5.6`
-- `org.springframework.boot:spring-boot-starter-data-mongodb:3.5.6`
-- `org.springframework.boot:spring-boot-starter-test:3.5.6`
-- `org.junit.jupiter:junit-jupiter`
-- `org.openjfx:javafx-maven-plugin:0.0.8`
+**Windows — PowerShell**
 
-These are Maven coordinates, not apt or pip package names.
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e ".\services\ml[dev]"
+```
 
-### Python libraries
+**macOS — Terminal**
 
-The canonical manifest is `services/ml/pyproject.toml`. For a copyable
-`requirements.txt` containing the current runtime/test libraries and the local
-service package, use:
+```bash
+python3.11 -m venv .venv
+./.venv/bin/python -m pip install --upgrade pip
+./.venv/bin/python -m pip install -e './services/ml[dev]'
+```
+
+The install includes FastAPI, Uvicorn, NumPy, pandas, scikit-learn, joblib, and testing dependencies as declared in `services/ml/pyproject.toml`.
+
+### 4. Download and Prepare the Sensor Data (First-Time Setup)
+
+Download the project sensor dataset (Preprocessed.zip) from [Zenodo record 15130001](https://zenodo.org/records/15130001). Place these three source CSV files in `data/raw/`:
 
 ```text
-fastapi==0.115.12
-uvicorn==0.34.2
-pytest==8.3.5
-httpx==0.28.1
--e ./services/ml
+data/raw/
+├── SENSOR01_preprocessed.csv
+├── SENSOR02_preprocessed.csv
+└── SENSOR04_preprocessed.csv
 ```
 
-From the repository root, using your virtual environment's Python:
+The source CSVs are not committed to Git. Their expected filenames and formats correspond to the current preprocessing scripts. If the downloaded files have different filenames, adjust the `--inputs` arguments accordingly, preserving the correct sensor IDs.
+
+Run preprocessing to produce one-minute measurements and chronological train/validation/test partitions.
+
+**Windows — PowerShell**
+
+```powershell
+.\.venv\Scripts\python.exe services\ml\scripts\preprocess_dataset.py `
+  --inputs `
+  data\raw\SENSOR01_preprocessed.csv `
+  data\raw\SENSOR02_preprocessed.csv `
+  data\raw\SENSOR04_preprocessed.csv `
+  --output-dir data\processed\forecasting
+```
+
+**macOS — Terminal**
 
 ```bash
-python -m pip install -r requirements.txt
+./.venv/bin/python services/ml/scripts/preprocess_dataset.py \
+  --inputs \
+  data/raw/SENSOR01_preprocessed.csv \
+  data/raw/SENSOR02_preprocessed.csv \
+  data/raw/SENSOR04_preprocessed.csv \
+  --output-dir data/processed/forecasting
 ```
 
-Alternatively, install directly from the manifest without creating a requirements
-file:
+Expected generated files:
+
+```text
+data/processed/forecasting/
+├── all_sensors.csv
+├── train.csv
+├── validation.csv
+├── test.csv
+└── preprocessing_report.json
+```
+
+### 5. Prepare Trained Forecasting Models (First-Time Setup)
+
+The ML inference service **requires saved model artifacts**. These artifacts are excluded from Git, so a fresh clone does not contain them. You must either generate them locally using the commands below **or obtain the same trusted artifact files from a teammate**. This is a one-time setup step, not part of each application startup.
+
+The production inference path currently uses **damped-trend point forecasts** and **future-peak quantile models** for 15-, 30-, and 60-minute horizons. The alternative Ridge, Random Forest, and HistGradientBoosting experiment scripts are **not required** for starting the application.
+
+**Windows — PowerShell**
+
+```powershell
+# Generate damped-trend configurations.
+.\.venv\Scripts\python.exe services\ml\scripts\evaluate_trend.py
+
+# Train the future-peak quantile models.
+.\.venv\Scripts\python.exe services\ml\scripts\evaluate_threshold_warnings.py --threshold 10
+```
+
+**macOS — Terminal**
 
 ```bash
-python -m pip install -e "./services/ml[dev]"
+# Generate damped-trend configurations.
+./.venv/bin/python services/ml/scripts/evaluate_trend.py
+
+# Train the future-peak quantile models.
+./.venv/bin/python services/ml/scripts/evaluate_threshold_warnings.py --threshold 10
 ```
 
-`apt` cannot install a pip requirements file. FastAPI installs Pydantic and
-Starlette transitively; pip supplies the build backend `setuptools>=75,<81`
-through its isolated build environment.
+The `--threshold 10` argument is used for the offline warning evaluation report. It does **not** fix the threshold for future API predictions; the application supplies the threshold per prediction request.
 
-ML training libraries are not selected yet; no NumPy, pandas, or scikit-learn
-dependency is required by the current health-check starter.
+Verify that all six inference artifacts exist:
 
-### Portability
+```text
+models/artifacts/forecasting/
+├── trend/
+│   ├── damped_trend_15min.json
+│   ├── damped_trend_30min.json
+│   └── damped_trend_60min.json
+└── warnings/
+    ├── peak_quantile_15min.joblib
+    ├── peak_quantile_30min.joblib
+    └── peak_quantile_60min.joblib
+```
 
-Windows: `mvnw.cmd`
+Do not commit large/raw sensor files, generated data, virtual environments, or trained artifacts to Git. Only load `.joblib` artifacts generated by this project or received from a trusted teammate.
 
-Linux/macOS: `mvnw`
+### 6. Start MongoDB
 
-## Development
+With Docker Desktop running, execute the following from the repository root.
 
-- [Local setup and commands](docs/development.md)
-- [Architecture, module layout, and pending M2 work](docs/architecture.md)
-- Java checks: `.\mvnw.cmd --batch-mode verify` (Windows) or `bash ./mvnw --batch-mode verify` (Linux/macOS).
-- Python checks: install `services/ml` with its `dev` extra, then run `python -m pytest services/ml/tests`.
+**Windows / macOS**
 
-See `CS5010 Project Spec.pdf` for the full Software Requirements Specification.
+```bash
+docker compose up -d --wait mongodb
+docker compose exec mongodb mongosh --quiet --eval "db.adminCommand({ping: 1})"
+```
 
-See `PROJECT_TIMELINE.md` for the milestone plan.
+The local MongoDB instance listens on `127.0.0.1:27017` and uses a persistent Docker volume. It is intended for **local development only**.
+
+### 7. Run All Application Components
+
+Use **three separate terminals**, all opened at the repository root, **after** MongoDB has started. Start the services in the order below.
+
+#### Windows — PowerShell
+
+**Terminal 1 — Python FastAPI (port 8000)**
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn cold_storage_ml.app:app --host 127.0.0.1 --port 8000
+```
+
+**Terminal 2 — Spring Boot backend (port 8080)**
+
+```powershell
+$env:UPLOAD_DIRECTORY = Join-Path (Get-Location) "data\uploads"
+.\mvnw.cmd -pl services/backend spring-boot:run
+```
+
+**Terminal 3 — JavaFX desktop UI**
+
+```powershell
+.\mvnw.cmd -pl apps/desktop javafx:run
+```
+
+#### macOS — Terminal
+
+**Terminal 1 — Python FastAPI (port 8000)**
+
+```bash
+./.venv/bin/python -m uvicorn cold_storage_ml.app:app --host 127.0.0.1 --port 8000
+```
+
+**Terminal 2 — Spring Boot backend (port 8080)**
+
+```bash
+export UPLOAD_DIRECTORY="$(pwd)/data/uploads"
+./mvnw -pl services/backend spring-boot:run
+```
+
+**Terminal 3 — JavaFX desktop UI**
+
+```bash
+./mvnw -pl apps/desktop javafx:run
+```
+
+Keep these three terminals open while using the application. The desktop communicates only with Spring Boot; Spring Boot calls FastAPI via HTTP and persists application records to MongoDB.
+
+**Configuration (optional overrides):** The project uses local defaults, so no credentials or API keys are needed for the standard setup. To override defaults, set real environment variables in the terminal that starts the corresponding service; the application does not automatically load a `.env` file.
+
+| Variable | Default | Used by |
+|---|---|---|
+| `ML_BASE_URL` | `http://127.0.0.1:8000` | Spring Boot → FastAPI |
+| `MONGODB_URI` | `mongodb://127.0.0.1:27017/cold_storage` | Spring Boot → MongoDB |
+| `BACKEND_PORT` | `8080` | Spring Boot |
+| `UPLOAD_DIRECTORY` | `./data/uploads` (relative to backend working directory) | Spring Boot file storage |
+| `BACKEND_URL` | `http://127.0.0.1:8080` | JavaFX → Spring Boot |
+| `FORECAST_ARTIFACT_DIR` | `models/artifacts/forecasting` (relative to the ML process working directory) | FastAPI model loading |
+
+Do not commit credentials or machine-specific `.env` files.
+
+### 8. Verify the Services and Run a Forecast
+
+Open another terminal and check the following endpoints after starting the services.
+
+**Windows — PowerShell**
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/health
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/ready
+Invoke-RestMethod http://127.0.0.1:8080/api/v1/health
+Invoke-RestMethod http://127.0.0.1:8080/api/v1/status
+```
+
+**macOS — Terminal**
+
+```bash
+curl -f http://127.0.0.1:8000/api/v1/health
+curl -f http://127.0.0.1:8000/api/v1/ready
+curl -f http://127.0.0.1:8080/api/v1/health
+curl -f http://127.0.0.1:8080/api/v1/status
+```
+
+The ML readiness endpoint should return:
+
+```json
+{"status":"ready","horizons_minutes":[15,30,60]}
+```
+
+A healthy `/api/v1/health` response alone does **not** mean that the saved ML models are available. If `/api/v1/ready` returns HTTP 503, verify the six files from Step 5 and that FastAPI was started from the repository root.
+
+In the JavaFX application:
+
+1. Upload a supported sensor CSV through the **Datasets** screen and allow processing to complete.
+2. Open **Forecast** and choose the uploaded **READY** dataset and its sensor (`SENSOR01`, `SENSOR02`, or `SENSOR04`).
+3. Select the forecast origin (latest valid window or a specific timestamp), horizons (15/30/60 minutes), and temperature threshold.
+4. Click **Run forecast** to request a real prediction via JavaFX → Spring Boot → FastAPI.
+5. Check the displayed point forecasts, future-peak estimates, threshold warnings, and (when available) observed temperatures.
+
+Each prediction requires **61 consecutive, valid one-minute readings** ending at the selected origin. Other sensor IDs are not supported by the currently trained models.
+
+### 9. Build and Run Automated Tests
+
+These commands can be run after installing dependencies. Stop any running app instances if needed; the Maven verification command also runs the Java test suite.
+
+**Windows — PowerShell**
+
+```powershell
+# Build and test the Java modules (Spring Boot + JavaFX).
+.\mvnw.cmd --batch-mode verify
+
+# Run Python ML tests.
+.\.venv\Scripts\python.exe -m pytest services\ml\tests -v
+```
+
+**macOS — Terminal**
+
+```bash
+# Build and test the Java modules (Spring Boot + JavaFX).
+./mvnw --batch-mode verify
+
+# Run Python ML tests.
+./.venv/bin/python -m pytest services/ml/tests -v
+```
+
+`DatasetWorkflowIntegrationTest` uses Testcontainers and requires Docker. Without Docker, that integration test may be skipped. The Java ML-client contract tests use mock responses; passing them does **not** replace a manual end-to-end forecast check with trained artifacts.
+
+### 10. Subsequent Runs and Shutdown
+
+After completing Steps 3–5 once, you **do not need to preprocess or retrain on every startup** unless source data, training settings, or model files change. For normal development, start MongoDB and run the three components in Step 7.
+
+To stop the application, use **Ctrl+C** in each service terminal and close the JavaFX window. To stop MongoDB without deleting its saved data:
+
+```bash
+docker compose stop mongodb
+```
+
+For further configuration and troubleshooting, see [`docs/development.md`](docs/development.md) and [`docs/_ML_Forecasting_Handoff.md`](docs/_ML_Forecasting_Handoff.md).
+
+## Progress So Far
+
+The following statuses summarize implementation against the **Phase 1 SRS functional requirements**. "Complete" refers to the presence of the feature and its focused checks in the repository; a separate real-world end-to-end walkthrough has not yet been confirmed.
+
+| Functional Requirement (from Phase 1) | Status | Notes |
+|---|---|---|
+| Upload and validate historical temperature CSV datasets | Complete | JavaFX upload workflow and backend CSV validation/resampling are implemented. |
+| Store uploaded datasets and allow dataset selection | Complete | Local CSV storage with MongoDB metadata; datasets can be selected in the desktop UI. |
+| Generate configurable short-term temperature forecasts | Complete | Python model-backed forecasts for 15-, 30-, and 60-minute horizons; JavaFX/Spring Boot/FastAPI call path is implemented. |
+| Show temperature threshold predictions and warnings | Complete | Future-peak estimates and threshold warnings are returned and displayed by the forecast UI. |
+| Compare forecasting model performance with baselines | Partial | Baseline and validation results are documented; the final held-out evaluation remains pending. |
+| Manage food products and associate them with temperature histories | Not started | Product management and history association have not been implemented. |
+| Estimate food spoilage risk and remaining shelf life | Partial | Feasibility research and a proposed validated growth-model approach are documented; the inference implementation is pending. |
+| Display previously saved predictions | Partial | The temperature forecast backend stores predictions in MongoDB, but the desktop history screen is still a placeholder. |
+| Generate and review audit logs | Partial | Backend audit-event recording is implemented; the desktop audit viewer and final access-control verification remain pending. |
+| Handle invalid data and prediction-service failures | Partial | Focused parser, API, and error-handling tests exist; full multi-service failure scenarios still need verification. |
+
+### Milestone Tracker
+
+The project is tracked across ten milestones. See [PROJECT_TIMELINE.md](PROJECT_TIMELINE.md) for deliverables and acceptance criteria.
+
+**Last updated:** November 7, 2026. M1 and M2 are marked complete based on the team's status decision; other statuses distinguish implementation progress from formal acceptance.
+
+| Milestone | Description | Due Date | Status |
+|---|---|---|---|
+| M1 | Requirements and Dataset Feasibility | Oct 25, 2026 | ✅ Completed |
+| M2 | Architecture, Contracts, and Development Setup | Nov 1, 2026 | ✅ Completed |
+| M3 | Local Application and Dataset Workflow | Nov 8, 2026 | 🟡 Nearly Complete |
+| M4 | Java-to-Python Inference Integration | Nov 12, 2026 | 🟡 Mostly Implemented |
+| M5 | Temperature Forecasting Model | Nov 19, 2026 | 🟡 Nearly Complete |
+| M6 | Spoilage and Shelf-Life Model | Nov 22, 2026 | ⚪ Early Development |
+| M7 | Complete Two-Module Application | Nov 29, 2026 | 🟡 Partially Implemented |
+| M8 | Automated QA and Held-Out Evaluation | Dec 6, 2026 | 🟡 Partially Implemented |
+| M9 | End-to-End Validation and Release Candidate | Dec 13, 2026 | ⚪ Not Started |
+| M10 | Local Release, Documentation, and Submission | Dec 21, 2026 | 🟡 Documentation Started |
+
+### Working End to End
+
+The **temperature forecasting code path is connected** across the application:
+
+1. In **Datasets**, the user uploads a supported sensor CSV, which Spring Boot validates and stores alongside MongoDB dataset metadata.
+2. In **Forecast**, the user selects a ready dataset, sensor, prediction horizon(s), and a temperature threshold.
+3. Spring Boot selects 61 consecutive one-minute readings and requests a model-backed forecast from Python FastAPI.
+4. The backend saves the prediction and related audit events in MongoDB and returns forecasts and warnings to JavaFX for display.
+
+## Testing So Far
+
+The repository uses **JUnit 5** for Java/JavaFX/backend testing and **pytest** for the Python forecasting service. Tests run automatically through [GitHub Actions](.github/workflows/ci.yml) on pushes and pull requests.
+
+| Test suite | Coverage | Latest verified CI result |
+|---|---|---|
+| Java — JUnit 5 | JavaFX client/form rules, CSV parsing/resampling, dataset workflow, MongoDB integration, ML HTTP contracts, auditing, and temperature forecast service | **70 passed**, 0 failed, 0 skipped (10 desktop + 60 backend) |
+| Python — pytest | ML service health, preprocessing, baselines, forecasting, inference, and warning behavior | **74 passed**, 0 failed (1 warning) |
+
+Results above come from the [November 7, 2026 successful CI run](https://github.com/AllisonLT/CS5010-Team-Project/actions/runs/42415646944) for `main` commit `a219f05d51f155f018382e9330689e92d7215253`. The Java suite includes Docker-backed dataset integration tests; ML client contract tests use mock responses and do not substitute for real FastAPI end-to-end testing. Local test commands are provided in **Setup and Run → Build and Run Automated Tests**.
+
+## Next Steps
+
+- Complete verification of the temperature forecasting workflow using real CSV uploads and saved ML artifacts, including service failure handling.
+- Finalize approval and implement the supported spoilage/shelf-life estimation method, product profiles, and temperature-history association.
+- Implement the desktop **Shelf Life**, **Prediction History**, and **Audit Log** screens and connect them to backend persistence and inference.
+- Finish held-out model evaluation, measured prediction latency, audit-control checks, and end-to-end regression testing.
+- Prepare repeatable demos and final release documentation.
+
+## Team Contributions
+
+| Member | Contributions This Phase |
+|---|---|
+| **Zi Ye** | Managed GitHub issues, milestone planning, and team progress tracking; established the repository architecture, development environment, and CI workflow; researched and documented dataset selection; contributed to full-stack development and project documentation. |
+| **Leyang Pan** | Developed and evaluated the temperature forecasting pipeline, including preprocessing and model training; implemented predictive threshold warnings and FastAPI inference endpoints; wrote Python tests, evaluation reports, and ML/Overall documentation. |
+| **Bo Sun** | Developed the JavaFX frontend, Spring Boot backend, and MongoDB persistence workflows; implemented CSV processing, dataset management, ML API integration, and audit logging; wrote Java unit and integration tests and technical design documentation. |
+

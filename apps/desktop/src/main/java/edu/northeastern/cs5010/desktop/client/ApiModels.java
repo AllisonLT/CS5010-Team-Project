@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 /** JSON bodies of API A as the desktop reads them (docs/api_contracts.md). Unknown fields are ignored. */
 public final class ApiModels {
@@ -77,5 +78,29 @@ public final class ApiModels {
                                  double predictedMinTemperatureC, double predictedMaxTemperatureC, Warning warning,
                                  List<Observed> observedAfterOrigin, List<String> limitations, Model model,
                                  long durationMs) {
+    }
+
+    public record PredictionPage(List<PredictionSummary> items, int page, int size, long totalItems) {
+    }
+
+    public record PredictionSummary(String id, String type, Instant createdAt, String datasetId,
+                                    String datasetName, String sensorId, String productId, String productName,
+                                    String headline, String modelVersion) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record AuditPage(List<AuditEntry> items, int page, int size, long total, List<String> eventTypes) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record AuditEntry(String id, Instant timestamp, String category, String eventType, String outcome,
+                             String source, String host, String actor, AuditRefs refs,
+                             Map<String, Object> details, AuditFailure error) {
+    }
+
+    public record AuditRefs(String datasetId, String productId, String predictionId) {
+    }
+
+    public record AuditFailure(String code, String message) {
     }
 }

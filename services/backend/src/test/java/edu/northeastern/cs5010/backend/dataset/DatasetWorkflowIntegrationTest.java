@@ -2,9 +2,13 @@ package edu.northeastern.cs5010.backend.dataset;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.bson.Document;
 import edu.northeastern.cs5010.backend.audit.AuditEventType;
 import edu.northeastern.cs5010.backend.audit.AuditRecord;
 import edu.northeastern.cs5010.backend.audit.AuditRepository;
+import edu.northeastern.cs5010.backend.inference.MlClient;
+import edu.northeastern.cs5010.backend.inference.MlDtos;
+import edu.northeastern.cs5010.backend.prediction.PredictionDocument;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -14,9 +18,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.MongoDBContainer;
@@ -26,13 +32,24 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -85,16 +102,80 @@ class DatasetWorkflowIntegrationTest {
     DatasetService service;
     @Autowired
     DatasetStorage storage;
+    @MockitoBean
+    MlClient ml;
 
     @BeforeEach
     void clean() throws IOException {
         mongoTemplate.dropCollection(DatasetDocument.class);
-        mongoTemplate.dropCollection(AuditRecord.class);
+        mongoTemplate.dropCollection(PredictionDocument.class);
+        mongoTemplate.getCollectionNames().stream().filter(name -> name.startsWith("audit_"))
+                .forEach(mongoTemplate::dropCollection);
         try (Stream<Path> files = Files.walk(uploads)) {
             files.sorted(java.util.Comparator.reverseOrder())
                     .filter(p -> !p.equals(uploads) && !p.endsWith("tmp") && !p.endsWith("datasets"))
                     .forEach(DatasetStorage::deleteQuietly);
         }
+    }
+
+    @Test
+    void savedHistoryReturnsTheOriginalResultAndIncludesEarlierRecords() throws Exception {
+        var start = LocalDateTime.of(2024, 9, 9, 13, 0);
+        var format = DateTimeFormatter.ofPattern("dd.MM.uuuu;HH:mm:ss");
+        String csv = "Date;Time;Temperature;Humidity\n" + String.join("\n", IntStream.rangeClosed(0, 60)
+                .mapToObj(minute -> start.plusMinutes(minute).format(format) + ";7.0;70.0").toList());
+        var uploaded = upload("SENSOR02_preprocessed.csv", csv, "displayName", "Cold room 2");
+        assertThat(uploaded.getResponse().getStatus()).isEqualTo(201);
+        String datasetId = json.readTree(uploaded.getResponse().getContentAsString()).get("id").asText();
+
+        mvc.perform(post("/api/v1/predictions/temperature").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(get("/api/v1/predictions")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItems").value(0));
+
+        when(ml.forecastTemperature(any())).thenReturn(new MlDtos.ForecastResponse("SENSOR02",
+                "2024-09-09T14:00:00", 7.0, 10.0, false,
+                List.of(new MlDtos.HorizonForecast(15, "2024-09-09T14:15:00", 7.5, 8.5, false)),
+                7.5, 7.5, "celsius", "test-model"));
+        var created = mvc.perform(post("/api/v1/predictions/temperature").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("datasetId", datasetId, "sensorId", "SENSOR02",
+                                "horizonsMinutes", List.of(15), "thresholdC", 10.0))))
+                .andExpect(status().isCreated()).andReturn();
+        JsonNode original = json.readTree(created.getResponse().getContentAsString());
+        String predictionId = original.get("id").asText();
+        Document saved = mongoTemplate.getCollection("predictions").find(new Document("_id", predictionId)).first();
+        assertThat(saved).isNotNull();
+        assertThat(saved.getString("datasetName")).isEqualTo("Cold room 2");
+
+        // An earlier MongoDB record has no stored dataset name.
+        Document earlier = new Document(saved);
+        earlier.remove("datasetName");
+        earlier.put("_id", "earlier-forecast");
+        Instant earlierTime = saved.getDate("createdAt").toInstant().minusSeconds(60);
+        earlier.put("createdAt", Date.from(earlierTime));
+        mongoTemplate.getCollection("predictions").insertOne(earlier);
+        mvc.perform(delete("/api/v1/datasets/{id}", datasetId)).andExpect(status().isNoContent());
+
+        mvc.perform(get("/api/v1/predictions").param("size", "1")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItems").value(2))
+                .andExpect(jsonPath("$.items[0].id").value(predictionId))
+                .andExpect(jsonPath("$.items[0].modelVersion").value("test-model"))
+                .andExpect(jsonPath("$.items[0].datasetName").value("Cold room 2"))
+                .andExpect(jsonPath("$.items[0].result").doesNotExist());
+        mvc.perform(get("/api/v1/predictions").param("size", "1").param("page", "1")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value("earlier-forecast"))
+                .andExpect(jsonPath("$.items[0].datasetName").value("Cold room 2"));
+        mvc.perform(get("/api/v1/predictions").param("datasetId", datasetId).param("type", "TEMPERATURE_FORECAST")
+                        .param("from", earlierTime.toString()).param("to", earlierTime.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.items[0].id").value("earlier-forecast"));
+
+        var reopened = mvc.perform(get(created.getResponse().getHeader("Location")))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(reopened.getResponse().getContentAsString())).isEqualTo(original);
+        mvc.perform(get("/api/v1/predictions/missing")).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PREDICTION_NOT_FOUND"));
+        verify(ml).forecastTemperature(any());
     }
 
     private MvcResult upload(String filename, String content, String... params) throws Exception {
@@ -108,6 +189,41 @@ class DatasetWorkflowIntegrationTest {
 
     private List<AuditRecord> auditOf(AuditEventType type) {
         return audit.findNewestFirst(Criteria.where("eventType").is(type), 0, 50);
+    }
+
+    @Test
+    void auditApiCombinesCategorizedLegacyAndMlRecordsAndRecordsRejectedWrites() throws Exception {
+        audit.insert(new AuditRecord("dataset-record", 1, Instant.parse("2026-11-07T20:00:00Z"),
+                AuditEventType.DATASET_UPLOADED, "backend.DatasetService", "host", "local-user:test",
+                AuditRecord.Outcome.SUCCESS, AuditRecord.Refs.dataset("dataset-1"), Map.of(), null));
+        assertThat(mongoTemplate.getCollection("audit_dataset").countDocuments()).isEqualTo(1);
+        for (String collection : List.of("audit_logs", "audit_ml")) {
+            boolean ml = collection.equals("audit_ml");
+            mongoTemplate.getCollection(collection).insertOne(new Document("_id", collection + "-record")
+                    .append("schemaVersion", 1)
+                    .append("timestamp", Date.from(Instant.parse(ml ? "2026-11-07T20:02:00Z" : "2026-11-07T20:01:00Z")))
+                    .append("source", ml ? "ml.predict_temperature" : "backend.DatasetService")
+                    .append("actor", ml ? "service:ml" : "local-user:test").append("host", "host")
+                    .append("eventType", ml ? "ML_INFERENCE_FAILED" : "DATASET_UPLOAD_REJECTED")
+                    .append("outcome", "FAILURE").append("refs", new Document()).append("details", new Document())
+                    .append("error", new Document("code", "REJECTED").append("message", "Invalid input")));
+        }
+        mvc.perform(get("/api/v1/audit-logs").param("size", "2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(3))
+                .andExpect(jsonPath("$.items[0].category").value("ML"))
+                .andExpect(jsonPath("$.items[0].error.code").value("REJECTED"))
+                .andExpect(jsonPath("$.items[1].id").value("audit_logs-record"));
+        mvc.perform(get("/api/v1/audit-logs").param("size", "2").param("page", "1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].id").value("dataset-record"));
+        mvc.perform(get("/api/v1/audit-logs").param("category", "DATASET").param("outcome", "FAILURE")
+                        .param("eventType", "DATASET_UPLOADED", "DATASET_UPLOAD_REJECTED")
+                        .param("from", "2026-11-07T20:01:00Z").param("to", "2026-11-07T20:01:00Z"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].id").value("audit_logs-record"));
+        mvc.perform(put("/api/v1/audit-logs/{id}", "dataset-record"))
+                .andExpect(status().isMethodNotAllowed()).andExpect(jsonPath("$.auditId").isNotEmpty());
+        assertThat(mongoTemplate.getCollection("audit_dataset").countDocuments()).isEqualTo(1);
+        assertThat(mongoTemplate.getCollection("audit_access").countDocuments()).isEqualTo(1);
     }
 
     @Test

@@ -119,6 +119,7 @@ One document per **successful** prediction. Failed predictions are never saved h
   "schemaVersion": 1,
   "type": "TEMPERATURE_FORECAST",
   "datasetId": "6f0c1d1e-8a54-4f3e-9b35-0e2a4f6f1c11",
+  "datasetName": "Cold room sensor 02",
   "sensorId": "SENSOR02",
   "productId": null,
   "request": {
@@ -126,7 +127,7 @@ One document per **successful** prediction. Failed predictions are never saved h
     "horizonsMinutes": [15, 30, 60],
     "thresholdC": 10.0
   },
-  "result": { "...": "response body from the ML service, as defined in #16" },
+  "result": { "...": "response body returned by the backend to the desktop" },
   "summary": {
     "warning": true,
     "headline": "Forecast exceeds 10.0 °C within 30 minutes"
@@ -140,9 +141,10 @@ One document per **successful** prediction. Failed predictions are never saved h
 | Field | Notes |
 |---|---|
 | `type` | `TEMPERATURE_FORECAST` or `SHELF_LIFE` |
+| `datasetName` | Saved dataset name. Earlier forecasts use the linked dataset metadata if available. |
 | `productId` | Set for `SHELF_LIFE`, `null` otherwise |
 | `request` | The user's choices, not the full reading history. The history can be rebuilt from the dataset file and the time window. |
-| `result` | The ML response stored as-is, so the history page shows exactly what the user saw |
+| `result` | The backend response sent to the desktop, including warning, model, and comparison readings |
 | `summary` | Short values for the history table, so it does not have to parse `result` |
 | `durationMs` | End-to-end backend time, used by #20 |
 
@@ -150,9 +152,11 @@ Prediction documents are written once and not edited.
 
 **Indexes:** `{ createdAt: -1 }`; `{ type: 1, createdAt: -1 }`; `{ datasetId: 1, createdAt: -1 }`; `{ productId: 1, createdAt: -1 }`.
 
-### `audit_logs`
+### Audit collections
 
-Kept in its own collection so it can have separate database permissions. The document shape, event list, and permissions are defined in #19 (`docs/audit_controls.md`). In outline:
+Backend audit events are stored by category. FastAPI writes to `audit_ml` and the original `audit_logs`
+collection is retained for earlier events. See [Audit Controls](audit_controls.md) for the collection names,
+event catalog, and permissions. All audit collections share this document shape.
 
 ```json
 {
@@ -161,6 +165,7 @@ Kept in its own collection so it can have separate database permissions. The doc
   "timestamp": { "$date": "2026-11-07T20:01:09.412Z" },
   "eventType": "PREDICTION_CREATED",
   "source": "backend.PredictionService",
+  "host": "laptop",
   "actor": "local-user",
   "outcome": "SUCCESS",
   "refs": { "datasetId": "6f0c...", "productId": null, "predictionId": "c3a2..." },
@@ -169,7 +174,7 @@ Kept in its own collection so it can have separate database permissions. The doc
 }
 ```
 
-**Indexes:** `{ timestamp: -1 }`; `{ eventType: 1, timestamp: -1 }`.
+**Indexes** include `{ timestamp: -1, _id: -1 }` and `{ eventType: 1, timestamp: -1 }` in the authenticated setup.
 
 ### Relationships
 
@@ -177,7 +182,7 @@ Kept in its own collection so it can have separate database permissions. The doc
 datasets 1 ──< products.temperatureSource.datasetId
 datasets 1 ──< predictions.datasetId
 products 1 ──< predictions.productId
-audit_logs.refs ──> datasets / products / predictions (by id, no cascade)
+audit records ──> datasets / products / predictions (via refs, no cascade)
 ```
 
 MongoDB does not enforce these references. The backend checks them on write: a product can only link to a `READY` dataset, and a prediction can only be created for a `READY` dataset and an `ACTIVE` product.

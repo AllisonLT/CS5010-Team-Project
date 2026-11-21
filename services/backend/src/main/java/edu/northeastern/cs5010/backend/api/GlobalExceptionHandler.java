@@ -6,15 +6,18 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -38,28 +41,57 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<ApiError> tooLarge(MaxUploadSizeExceededException e) {
-        return api(new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE", "File too large",
-                "Files must be at most 50 MB."));
+    public ResponseEntity<ApiError> tooLarge(MaxUploadSizeExceededException e, HttpServletRequest request) {
+        return auditRejectedRequest(request, new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE",
+                "File too large", "Files must be at most 50 MB."));
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
-            MissingServletRequestParameterException.class, MissingServletRequestPartException.class})
-    public ResponseEntity<ApiError> malformed(Exception e) {
-        return api(new ApiException(HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST", "Malformed request",
-                "The request could not be read: " + e.getMessage()));
+            MissingServletRequestParameterException.class, MissingServletRequestPartException.class,
+            MultipartException.class})
+    public ResponseEntity<ApiError> malformed(Exception e, HttpServletRequest request) {
+        return auditRejectedRequest(request, new ApiException(HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST",
+                "Malformed request", "Check the request body and filter values."));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiError> unsupportedContent(HttpServletRequest request) {
+        return auditRejectedRequest(request, new ApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "UNSUPPORTED_MEDIA_TYPE", "Unsupported content type",
+                "Send the content type required by this endpoint."));
+    }
+
+    private ResponseEntity<ApiError> auditRejectedRequest(HttpServletRequest request, ApiException error) {
+        if ("POST".equals(request.getMethod())) {
+            AuditEventType type = switch (request.getRequestURI()) {
+                case "/api/v1/datasets" -> AuditEventType.DATASET_UPLOAD_REJECTED;
+                case "/api/v1/predictions/temperature" -> AuditEventType.PREDICTION_FAILED;
+                default -> null;
+            };
+            if (type != null) {
+                error = error.withAuditId(audit.recordFailure(type, GlobalExceptionHandler.class, null,
+                        Map.of(), error.code(), error.getMessage()));
+            }
+        }
+        return api(error);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ApiError> method(HttpRequestMethodNotSupportedException e, HttpServletRequest request) {
         String auditId = null;
-        if (request.getRequestURI().startsWith("/api/v1/audit-logs")) {
+        HttpHeaders headers = new HttpHeaders();
+        if (e.getSupportedHttpMethods() != null) {
+            headers.setAllow(e.getSupportedHttpMethods());
+        }
+        if (request.getRequestURI().matches("/api/v1/audit-logs(?:/[^/]+)?")
+                && List.of("POST", "PUT", "PATCH", "DELETE").contains(e.getMethod())) {
             auditId = audit.recordFailure(AuditEventType.AUDIT_MODIFICATION_REJECTED, GlobalExceptionHandler.class,
-                    null, Map.of("method", e.getMethod(), "path", request.getRequestURI()),
+                    null, Map.of("method", e.getMethod()),
                     "METHOD_NOT_ALLOWED", "Audit records cannot be changed or deleted");
         }
-        return api(new ApiException(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "Not allowed",
-                e.getMethod() + " is not allowed on " + request.getRequestURI() + ".", List.of(), auditId));
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).headers(headers)
+                .body(new ApiException(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "Not allowed",
+                        e.getMethod() + " is not allowed on this endpoint.", List.of(), auditId).toBody());
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
@@ -80,7 +112,7 @@ public class GlobalExceptionHandler {
         log.error("Unhandled error on {} {}", request.getMethod(), request.getRequestURI(), e);
         String auditId = audit.recordFailure(AuditEventType.SYSTEM_ERROR, GlobalExceptionHandler.class, null,
                 Map.of("method", request.getMethod(), "path", request.getRequestURI()),
-                "INTERNAL_ERROR", e.toString());
+                "INTERNAL_ERROR", "Unexpected backend request error");
         return api(new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Unexpected error",
                 "Something went wrong in the backend. Details are in the backend log.", List.of(), auditId));
     }

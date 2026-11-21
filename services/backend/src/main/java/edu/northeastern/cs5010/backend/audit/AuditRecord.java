@@ -1,5 +1,6 @@
 package edu.northeastern.cs5010.backend.audit;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -29,6 +30,11 @@ public record AuditRecord(
         Refs refs,
         Map<String, Object> details,
         Failure error) {
+
+    @JsonProperty
+    public AuditCategory category() {
+        return eventType.category();
+    }
 
     public enum Outcome { SUCCESS, FAILURE }
 

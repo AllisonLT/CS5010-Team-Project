@@ -176,14 +176,19 @@ class ForecastView {
     }
 
     private void showResult(ApiModels.ForecastResult r) {
+        results.getChildren().setAll(resultContent(r), new Label("Saved to Prediction History."));
+    }
+
+    static VBox resultContent(ApiModels.ForecastResult r) {
         Label banner = Views.wrapped(prefix(r.warning().level()) + r.warning().message());
         banner.setMaxWidth(Double.MAX_VALUE);
         banner.setStyle("-fx-padding: 8; -fx-font-weight: bold; -fx-background-color: " + color(r.warning().level())
                 + ";");
 
-        Label current = new Label("Current reading (" + Views.naive(r.originTimestamp()) + "): "
+        Label current = Views.wrapped("Current reading (" + Views.naive(r.originTimestamp()) + "): "
                 + Views.celsius(r.currentTemperatureC())
-                + (r.currentlyAboveThreshold() ? " (at or above threshold)" : " (below threshold)"));
+                + (r.currentlyAboveThreshold() ? " (at or above threshold)" : " (below threshold)")
+                + "    Threshold: " + Views.celsius(r.thresholdC()));
 
         Map<String, Double> actual = new HashMap<>();
         r.observedAfterOrigin().forEach(o -> actual.put(o.timestamp(), o.temperatureC()));
@@ -206,10 +211,10 @@ class ForecastView {
                 + "    Predicted maximum: " + Views.celsius(r.predictedMaxTemperatureC()));
         VBox limitations = new VBox(2);
         r.limitations().forEach(text -> limitations.getChildren().add(Views.wrapped(text)));
-        Label saved = new Label(String.format(Locale.ROOT, "Saved to Prediction History.  Model: %s (%s)  •  %d ms",
+        Label model = Views.wrapped(String.format(Locale.ROOT, "Model: %s (%s)  •  %d ms",
                 r.model().name(), r.model().version(), r.durationMs()));
-        saved.setStyle("-fx-text-fill: #555555;");
-        results.getChildren().setAll(banner, current, table, summary, limitations, saved);
+        model.setStyle("-fx-text-fill: #555555;");
+        return new VBox(8, banner, current, table, summary, limitations, model);
     }
 
     private static TableColumn<ApiModels.Forecast, String> column(String title,

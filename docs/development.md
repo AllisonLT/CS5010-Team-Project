@@ -60,6 +60,40 @@ volume. This unauthenticated instance is for local development only. Do not expo
 it to a network or use it for sensitive data. Alternatively, run local MongoDB 7
 on `127.0.0.1:27017`; the backend's default database is `cold_storage`.
 
+### Enable MongoDB audit permissions
+
+Use the authenticated configuration when demonstrating audit protection. It uses
+the same named volume and retains existing audit records.
+
+```powershell
+docker compose -f compose.yaml -f compose.audit.yaml up -d --wait mongodb
+# Once, if MongoDB has no administrator yet. Run the shell inside the container for first-user setup.
+docker compose exec mongodb mongosh admin
+```
+
+In that MongoDB shell, create the administrator and exit the shell.
+
+```javascript
+db.createUser({user: "audit_admin", pwd: passwordPrompt(), roles: ["root"]})
+exit
+```
+
+```powershell
+docker compose cp scripts/setup-mongo-audit.js mongodb:/tmp/setup-mongo-audit.js
+docker compose exec mongodb mongosh --username audit_admin --authenticationDatabase admin --file /tmp/setup-mongo-audit.js
+```
+
+The script prompts for separate service passwords on first setup. In the backend
+terminal, set `MONGODB_URI` to
+`mongodb://cold_storage_app:<password>@127.0.0.1:27017/cold_storage`.
+In the ML terminal, set `ML_AUDIT_MONGODB_URI` to
+`mongodb://cold_storage_ml:<password>@127.0.0.1:27017/cold_storage`.
+Percent-encode reserved characters in passwords. Both URIs must point to the
+same database. The backend reads the ML collection, and the ML account has
+insert access to that collection. The two accounts lack update and delete
+permissions on audit records. Keep the Compose override in subsequent
+`up` commands to retain authentication.
+
 ## Start the components
 
 Use separate terminals, each at the repository root. Start MongoDB, then ML,
@@ -108,6 +142,7 @@ Set environment variables in the terminal that launches the backend:
 |---|---|---|
 | `BACKEND_PORT` | `8080` | Backend HTTP port; loopback binding is fixed in application properties. |
 | `MONGODB_URI` | `mongodb://127.0.0.1:27017/cold_storage` | MongoDB connection. |
+| `ML_AUDIT_MONGODB_URI` | `MONGODB_URI` or `mongodb://127.0.0.1:27017/cold_storage` | Connection used by FastAPI for audit inserts. Use the separate ML account in authenticated mode. |
 | `ML_BASE_URL` | `http://127.0.0.1:8000` | FastAPI service used for predictions. |
 | `UPLOAD_DIRECTORY` | `./data/uploads` | Uploaded CSV files and their one-minute versions, relative to the backend working directory. |
 | `BACKEND_URL` | `http://127.0.0.1:8080` | Set in the desktop's terminal if the backend runs elsewhere. |

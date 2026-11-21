@@ -13,6 +13,7 @@ import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -66,6 +67,32 @@ class BackendClientTest {
         assertThat(status.database()).isEqualTo("DOWN");
         assertThat(status.mlService()).isEqualTo("NOT_READY");
         assertThat(status.checkedAt()).hasToString("2026-11-07T20:00:00Z");
+    }
+
+    @Test
+    void readsPagedAuditEntriesFromTheBackendWithFilters() {
+        AtomicReference<String> query = new AtomicReference<>();
+        server.createContext("/api/v1/audit-logs", exchange -> {
+            query.set(exchange.getRequestURI().getQuery());
+            send(exchange, 200, """
+                    {"items":[{"id":"a-1","timestamp":"2026-11-07T20:00:00Z","category":"ML",
+                               "eventType":"ML_INFERENCE_FAILED","outcome":"FAILURE","source":"ml.predict_temperature",
+                               "actor":"service:ml","host":"local",
+                               "details":{},"error":{"code":"HTTP_422","message":"Invalid input"}}],
+                     "page":1,"size":50,"total":51,"eventTypes":["ML_INFERENCE_FAILED"]}
+                    """);
+        });
+
+        var result = client.auditLogs("ML", "ML_INFERENCE_FAILED", "FAILURE",
+                Instant.parse("2026-11-07T20:00:00Z"), null, 1);
+
+        assertThat(query.get()).isEqualTo(
+                "page=1&category=ML&eventType=ML_INFERENCE_FAILED&outcome=FAILURE&from=2026-11-07T20:00:00Z");
+        assertThat(result.total()).isEqualTo(51);
+        assertThat(result.items()).singleElement().satisfies(entry -> {
+            assertThat(entry.timestamp()).isEqualTo(Instant.parse("2026-11-07T20:00:00Z"));
+            assertThat(entry.error().code()).isEqualTo("HTTP_422");
+        });
     }
 
     @Test

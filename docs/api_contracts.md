@@ -366,7 +366,8 @@ All numbers in this example are illustrative. `flags` may contain `OUTSIDE_VALID
 
 ### `GET /api/v1/predictions` and `GET /api/v1/predictions/{id}`
 
-List query: `type`, `datasetId`, `productId`, `from`, `to` (UTC), `page`, `size`. Newest first.
+All list filters are optional. Use `type`, `datasetId`, `productId`, `from` and `to` (inclusive ISO 8601
+instants), `page` (zero-based, default 0), and `size` (1–100, default 50). Results are newest first.
 
 ```json
 {
@@ -375,7 +376,10 @@ List query: `type`, `datasetId`, `productId`, `from`, `to` (UTC), `page`, `size`
       "id": "c3a2e9f1-1d7b-4a0e-8f4c-6b2d9e0a7f55",
       "type": "TEMPERATURE_FORECAST",
       "createdAt": "2026-11-07T20:01:09.412Z",
+      "datasetId": "6f0c1d1e-8a54-4f3e-9b35-0e2a4f6f1c11",
       "datasetName": "Cold room sensor 02",
+      "sensorId": "SENSOR02",
+      "productId": null,
       "productName": null,
       "headline": "May reach 10.0 °C within 30 minutes",
       "modelVersion": "forecasting-2026-11-07"
@@ -385,13 +389,22 @@ List query: `type`, `datasetId`, `productId`, `from`, `to` (UTC), `page`, `size`
 }
 ```
 
-`GET /api/v1/predictions/{id}` returns the same body that the original `POST` returned.
+`GET /api/v1/predictions/{id}` returns the saved body from the original `POST`, including when the source
+dataset has since been deleted. An unknown ID returns `404 PREDICTION_NOT_FOUND`.
 
 ### `GET /api/v1/audit-logs`
 
-Query: `eventType` (repeatable), `outcome`, `from`, `to` (UTC), `page`, `size`. Newest first. Fields are defined in #19.
+Query parameters are optional. Use `category` (`SYSTEM`, `DATASET`, `PRODUCT`, `PREDICTION`, `WARNING`,
+`ACCESS`, or `ML`), `eventType` (repeatable), `outcome` (`SUCCESS` or `FAILURE`), `from` and `to`
+(inclusive ISO 8601 instants), `page` (zero-based, default 0), and `size` (1–100, default 50).
 
-`PUT`, `PATCH`, and `DELETE` on `/api/v1/audit-logs` and `/api/v1/audit-logs/{id}` return **405** `METHOD_NOT_ALLOWED`, and the attempt is itself audited.
+The response contains `items` (newest first), `page`, `size`, `total`, and `eventTypes` (the catalog for
+the selected category). Each item contains the record fields in [Audit Controls](audit_controls.md), with
+`id` for MongoDB's `_id` and an additional `category`. The backend reads Java and Python records from
+MongoDB, including older backend records in `audit_logs`.
+
+`POST`, `PUT`, `PATCH`, and `DELETE` on `/api/v1/audit-logs` and `/api/v1/audit-logs/{id}` return
+**405** `METHOD_NOT_ALLOWED` and generate an `AUDIT_MODIFICATION_REJECTED` event.
 
 ## 3. API B: Backend → ML service
 

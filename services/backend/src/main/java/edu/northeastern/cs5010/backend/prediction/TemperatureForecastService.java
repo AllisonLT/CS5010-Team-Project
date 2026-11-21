@@ -74,14 +74,20 @@ public class TemperatureForecastService {
 
     public TemperatureForecast.Response forecast(TemperatureForecast.Request request) {
         long started = System.nanoTime();
-        List<Integer> horizons = validate(request);
-        DatasetDocument dataset = datasets.getReady(request.datasetId());
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("predictionType", PredictionDocument.PredictionType.TEMPERATURE_FORECAST.name());
         details.put("sensorId", request.sensorId());
+        AuditRecord.Refs refs = AuditRecord.Refs.dataset(request.datasetId());
+        List<Integer> horizons;
+        DatasetDocument dataset;
+        try {
+            horizons = validate(request);
+            dataset = datasets.getReady(request.datasetId());
+        } catch (ApiException e) {
+            throw failed(refs, details, e);
+        }
         details.put("horizonsMinutes", horizons);
         details.put("thresholdC", request.thresholdC());
-        AuditRecord.Refs refs = AuditRecord.Refs.dataset(dataset.id());
 
         List<MinuteReading> minutes;
         LocalDateTime origin;
@@ -129,7 +135,7 @@ public class TemperatureForecastService {
         Map<String, Object> requestRecord = new LinkedHashMap<>(details);
         requestRecord.remove("predictionType");
         predictions.insert(new PredictionDocument(id, 1, PredictionDocument.PredictionType.TEMPERATURE_FORECAST,
-                dataset.id(), request.sensorId(), null, requestRecord,
+                dataset.id(), dataset.displayName(), request.sensorId(), null, requestRecord,
                 json.convertValue(response, new TypeReference<Map<String, Object>>() { }),
                 new PredictionDocument.Summary(warning.level() != TemperatureForecast.WarningLevel.NONE,
                         warning.message()),

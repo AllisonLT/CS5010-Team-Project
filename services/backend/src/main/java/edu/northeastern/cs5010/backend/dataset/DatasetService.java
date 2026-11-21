@@ -192,14 +192,20 @@ public class DatasetService {
             }
             return result;
         } catch (IOException e) {
-            markMissing(dataset, e);
+            markMissing(dataset);
             throw new ApiException(HttpStatus.CONFLICT, "DATASET_NOT_READY", "Dataset not available",
                     "The stored file for '" + dataset.displayName() + "' is missing or unreadable.");
         }
     }
 
     public void delete(String id) {
-        DatasetDocument dataset = get(id);
+        DatasetDocument dataset;
+        try {
+            dataset = get(id);
+        } catch (ApiException e) {
+            throw e.withAuditId(audit.recordFailure(AuditEventType.DATASET_DELETED, DatasetService.class,
+                    AuditRecord.Refs.dataset(id), Map.of(), e.code(), e.getMessage()));
+        }
         if (dataset.status() == DatasetStatus.DELETED) {
             return;
         }
@@ -208,7 +214,7 @@ public class DatasetService {
             repository.save(dataset.withStatus(DatasetStatus.DELETED, Instant.now(clock)));
         } catch (RuntimeException e) {
             audit.recordFailure(AuditEventType.DATASET_DELETED, DatasetService.class, AuditRecord.Refs.dataset(id),
-                    details, "DATABASE_ERROR", e.getMessage());
+                    details, "DATABASE_ERROR", "The dataset status could not be saved");
             throw e;
         }
         try {
@@ -231,7 +237,7 @@ public class DatasetService {
             for (DatasetDocument dataset : repository.findByStatus(DatasetStatus.READY)) {
                 if (!Files.isRegularFile(storage.resolve(dataset.storage().sourcePath()))
                         || !Files.isRegularFile(storage.resolve(dataset.storage().processedPath()))) {
-                    markMissing(dataset, null);
+                    markMissing(dataset);
                 }
             }
         } catch (RuntimeException e) {
@@ -264,14 +270,14 @@ public class DatasetService {
         return new DatasetDocument.MinuteSummary(minutes.size(), missing, longest, min, max);
     }
 
-    private void markMissing(DatasetDocument dataset, Exception cause) {
+    private void markMissing(DatasetDocument dataset) {
         if (dataset.status() != DatasetStatus.READY) {
             return;
         }
         repository.save(dataset.withStatus(DatasetStatus.MISSING_FILE, Instant.now(clock)));
         audit.recordFailure(AuditEventType.DATASET_FILE_MISSING, DatasetService.class,
                 AuditRecord.Refs.dataset(dataset.id()), Map.of("displayName", dataset.displayName()),
-                "FILE_MISSING", cause == null ? "Stored file not found at startup" : cause.toString());
+                "FILE_MISSING", "The stored dataset file could not be read");
     }
 
     private void undoUpload(String id) {
@@ -304,7 +310,7 @@ public class DatasetService {
         log.error("Dataset upload failed", cause);
         String auditId = audit.recordFailure(AuditEventType.DATASET_UPLOAD_FAILED, DatasetService.class,
                 datasetId == null ? null : AuditRecord.Refs.dataset(datasetId), details, "STORAGE_ERROR",
-                cause.toString());
+                "The dataset could not be saved to local storage or MongoDB");
         return new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Upload failed",
                 "The file is valid but could not be saved. Nothing was stored. Check that MongoDB is running "
                         + "and the upload folder is writable, then try again.", List.of(), auditId);

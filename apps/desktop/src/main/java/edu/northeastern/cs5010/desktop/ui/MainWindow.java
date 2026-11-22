@@ -46,8 +46,8 @@ public class MainWindow {
         factories.put(Screen.DATASETS, () -> new DatasetsView(client).node());
         factories.put(Screen.FORECAST, () -> new ForecastView(client).node());
         factories.put(Screen.SHELF_LIFE, () -> placeholder(Screen.SHELF_LIFE, "#38"));
-        factories.put(Screen.HISTORY, () -> placeholder(Screen.HISTORY, "#39"));
-        factories.put(Screen.AUDIT, () -> placeholder(Screen.AUDIT, "#40"));
+        factories.put(Screen.HISTORY, () -> new PredictionHistoryView(client).node());
+        factories.put(Screen.AUDIT, () -> new AuditView(client).node());
 
         navigation.getItems().setAll(Screen.values());
         navigation.setPrefWidth(190);
@@ -89,6 +89,7 @@ public class MainWindow {
     private void show(Screen screen) {
         // Datasets can change on other screens, so those screens are rebuilt each time they are opened.
         Node node = screen == Screen.HOME || screen == Screen.DATASETS || screen == Screen.FORECAST
+                || screen == Screen.HISTORY || screen == Screen.AUDIT
                 ? factories.get(screen).get()
                 : screens.computeIfAbsent(screen, s -> factories.get(s).get());
         app.setCenter(node);

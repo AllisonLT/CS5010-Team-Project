@@ -49,7 +49,7 @@ Install the following before proceeding:
 | Git | Any recent version |
 | JDK | **Java 21** (set `JAVA_HOME` to the JDK) |
 | Python | **Python 3.11** recommended (the project's tested baseline) |
-| Maven | No separate installation required; use the included Maven Wrapper (`mvnw.cmd` / `mvnw`) |
+| Maven | Use the included Maven Wrapper (`mvnw.cmd` on Windows, `bash ./mvnw` on macOS) |
 | Docker Desktop | Docker Engine and Compose v2, for local **MongoDB 7** (or install MongoDB 7 locally instead) |
 | Desktop | A graphical desktop environment is required for JavaFX |
 
@@ -108,7 +108,9 @@ python3.11 -m venv .venv
 ./.venv/bin/python -m pip install -e './services/ml[dev]'
 ```
 
-The install includes FastAPI, Uvicorn, NumPy, pandas, scikit-learn, joblib, and testing dependencies as declared in `services/ml/pyproject.toml`.
+The install includes FastAPI, Uvicorn, NumPy, pandas, scikit-learn, joblib, PyMongo, and testing dependencies as declared in `services/ml/pyproject.toml`.
+
+If you already have a virtual environment, rerun the `pip install -e` command above after pulling the audit changes to install PyMongo in that environment.
 
 ### 4. Download and Prepare the Sensor Data (First-Time Setup)
 
@@ -215,6 +217,8 @@ docker compose exec mongodb mongosh --quiet --eval "db.adminCommand({ping: 1})"
 
 The local MongoDB instance listens on `127.0.0.1:27017` and uses a persistent Docker volume. It is intended for **local development only**.
 
+To enforce audit collection permissions in MongoDB, follow the [authenticated setup](docs/development.md#enable-mongodb-audit-permissions). It uses `compose.audit.yaml` and separate accounts for Spring Boot and FastAPI. Keep the override in subsequent Compose startup commands for that instance.
+
 ### 7. Run All Application Components
 
 Use **three separate terminals**, all opened at the repository root, **after** MongoDB has started. Start the services in the order below.
@@ -252,16 +256,16 @@ $env:UPLOAD_DIRECTORY = Join-Path (Get-Location) "data\uploads"
 
 ```bash
 export UPLOAD_DIRECTORY="$(pwd)/data/uploads"
-./mvnw -pl services/backend spring-boot:run
+bash ./mvnw -pl services/backend spring-boot:run
 ```
 
 **Terminal 3 — JavaFX desktop UI**
 
 ```bash
-./mvnw -pl apps/desktop javafx:run
+bash ./mvnw -pl apps/desktop javafx:run
 ```
 
-Keep these three terminals open while using the application. The desktop communicates only with Spring Boot; Spring Boot calls FastAPI via HTTP and persists application records to MongoDB.
+Keep these three terminals open while using the application. The desktop communicates with Spring Boot. Spring Boot calls FastAPI and handles prediction persistence. Both services write audit events to MongoDB.
 
 **Configuration (optional overrides):** The project uses local defaults, so no credentials or API keys are needed for the standard setup. To override defaults, set real environment variables in the terminal that starts the corresponding service; the application does not automatically load a `.env` file.
 
@@ -269,12 +273,13 @@ Keep these three terminals open while using the application. The desktop communi
 |---|---|---|
 | `ML_BASE_URL` | `http://127.0.0.1:8000` | Spring Boot → FastAPI |
 | `MONGODB_URI` | `mongodb://127.0.0.1:27017/cold_storage` | Spring Boot → MongoDB |
+| `ML_AUDIT_MONGODB_URI` | `MONGODB_URI` from the FastAPI terminal, or `mongodb://127.0.0.1:27017/cold_storage` | FastAPI → MongoDB audit inserts |
 | `BACKEND_PORT` | `8080` | Spring Boot |
 | `UPLOAD_DIRECTORY` | `./data/uploads` (relative to backend working directory) | Spring Boot file storage |
 | `BACKEND_URL` | `http://127.0.0.1:8080` | JavaFX → Spring Boot |
 | `FORECAST_ARTIFACT_DIR` | `models/artifacts/forecasting` (relative to the ML process working directory) | FastAPI model loading |
 
-Do not commit credentials or machine-specific `.env` files.
+Point both services at the same database so the desktop can show audit events from both. In authenticated mode, set `MONGODB_URI` in the backend terminal and `ML_AUDIT_MONGODB_URI` in the FastAPI terminal using their respective accounts. Keep credentials and machine-specific `.env` files outside version control.
 
 ### 8. Verify the Services and Run a Forecast
 
@@ -313,12 +318,14 @@ In the JavaFX application:
 3. Select the forecast origin (latest valid window or a specific timestamp), horizons (15/30/60 minutes), and temperature threshold.
 4. Click **Run forecast** to request a real prediction via JavaFX → Spring Boot → FastAPI.
 5. Check the displayed point forecasts, future-peak estimates, threshold warnings, and (when available) observed temperatures.
+6. Open **Prediction History** and double-click the new row to reopen the stored forecast.
+7. Open **Audit Log** and check for a `PREDICTION_CREATED` event from Spring Boot and an `ML_INFERENCE_SUCCEEDED` event from FastAPI.
 
 Each prediction requires **61 consecutive, valid one-minute readings** ending at the selected origin. Other sensor IDs are not supported by the currently trained models.
 
 ### 9. Build and Run Automated Tests
 
-These commands can be run after installing dependencies. Stop any running app instances if needed; the Maven verification command also runs the Java test suite.
+Run these commands after installing the dependencies in Step 3. Start Docker Desktop before running Maven if you want the MongoDB integration tests included. Testcontainers starts its own MongoDB instance. Python tests use temporary model fixtures and a mocked audit collection, so you can run them with the application stopped and before downloading the datasets or training the models.
 
 **Windows — PowerShell**
 
@@ -334,13 +341,13 @@ These commands can be run after installing dependencies. Stop any running app in
 
 ```bash
 # Build and test the Java modules (Spring Boot + JavaFX).
-./mvnw --batch-mode verify
+bash ./mvnw --batch-mode verify
 
 # Run Python ML tests.
 ./.venv/bin/python -m pytest services/ml/tests -v
 ```
 
-`DatasetWorkflowIntegrationTest` uses Testcontainers and requires Docker. Without Docker, that integration test may be skipped. The Java ML-client contract tests use mock responses; passing them does **not** replace a manual end-to-end forecast check with trained artifacts.
+`DatasetWorkflowIntegrationTest` covers the dataset workflow, audit API, and prediction history against MongoDB. Maven skips this class when Testcontainers cannot reach Docker. Use Step 8 to verify the full workflow with trained artifacts and the running desktop app.
 
 ### 10. Subsequent Runs and Shutdown
 
@@ -356,7 +363,7 @@ For further configuration and troubleshooting, see [`docs/development.md`](docs/
 
 ## Progress So Far
 
-The following statuses summarize implementation against the **Phase 1 SRS functional requirements**. "Complete" refers to the presence of the feature and its focused checks in the repository; a separate real-world end-to-end walkthrough has not yet been confirmed.
+The table summarizes implementation against the **Phase 1 SRS functional requirements**. For this progress snapshot, the spoilage and shelf-life workflow, including product profiles, saved results, and spoilage audit events, is complete. Those additions still need verification after integration. The temperature forecasting, prediction history, and audit workflows have been exercised locally.
 
 | Functional Requirement (from Phase 1) | Status | Notes |
 |---|---|---|
@@ -365,28 +372,28 @@ The following statuses summarize implementation against the **Phase 1 SRS functi
 | Generate configurable short-term temperature forecasts | Complete | Python model-backed forecasts for 15-, 30-, and 60-minute horizons; JavaFX/Spring Boot/FastAPI call path is implemented. |
 | Show temperature threshold predictions and warnings | Complete | Future-peak estimates and threshold warnings are returned and displayed by the forecast UI. |
 | Compare forecasting model performance with baselines | Partial | Baseline and validation results are documented; the final held-out evaluation remains pending. |
-| Manage food products and associate them with temperature histories | Not started | Product management and history association have not been implemented. |
-| Estimate food spoilage risk and remaining shelf life | Partial | Feasibility research and a proposed validated growth-model approach are documented; the inference implementation is pending. |
-| Display previously saved predictions | Partial | The temperature forecast backend stores predictions in MongoDB, but the desktop history screen is still a placeholder. |
-| Generate and review audit logs | Partial | Backend audit-event recording is implemented; the desktop audit viewer and final access-control verification remain pending. |
+| Manage food products and associate them with temperature histories | Complete | Users can select a supported product profile and link it to a temperature history. |
+| Estimate food spoilage risk and remaining shelf life | Complete | The workflow estimates spoilage risk and remaining shelf life for supported products and displays the applicable model limitations. |
+| Display previously saved predictions | Complete | Prediction History reopens successful results saved in MongoDB. Forecast history was verified locally. Shelf-life history is included in the implementation assumption. |
+| Generate and review audit logs | Complete | The desktop Audit Log displays backend and FastAPI events. Product and spoilage audit events are included in the implementation assumption. See [audit setup](docs/development.md#enable-mongodb-audit-permissions). |
 | Handle invalid data and prediction-service failures | Partial | Focused parser, API, and error-handling tests exist; full multi-service failure scenarios still need verification. |
 
 ### Milestone Tracker
 
 The project is tracked across ten milestones. See [PROJECT_TIMELINE.md](PROJECT_TIMELINE.md) for deliverables and acceptance criteria.
 
-**Last updated:** November 7, 2026. M1 and M2 are marked complete based on the team's status decision; other statuses distinguish implementation progress from formal acceptance.
+**Last updated** November 20, 2026. M1 and M2 retain the team's completion decisions. M4, M6, and M7 reflect the  spoilage integration. Formal acceptance still depends on the tests and demonstrations in the project timeline.
 
 | Milestone | Description | Due Date | Status |
 |---|---|---|---|
 | M1 | Requirements and Dataset Feasibility | Oct 25, 2026 | ✅ Completed |
 | M2 | Architecture, Contracts, and Development Setup | Nov 1, 2026 | ✅ Completed |
-| M3 | Local Application and Dataset Workflow | Nov 8, 2026 | 🟡 Nearly Complete |
-| M4 | Java-to-Python Inference Integration | Nov 12, 2026 | 🟡 Mostly Implemented |
-| M5 | Temperature Forecasting Model | Nov 19, 2026 | 🟡 Nearly Complete |
-| M6 | Spoilage and Shelf-Life Model | Nov 22, 2026 | ⚪ Early Development |
-| M7 | Complete Two-Module Application | Nov 29, 2026 | 🟡 Partially Implemented |
-| M8 | Automated QA and Held-Out Evaluation | Dec 6, 2026 | 🟡 Partially Implemented |
+| M3 | Local Application and Dataset Workflow | Nov 8, 2026 | ✅ Implemented |
+| M4 | Java-to-Python Inference Integration | Nov 12, 2026 | ✅ Implemented |
+| M5 | Temperature Forecasting Model | Nov 19, 2026 | ✅ Implemented |
+| M6 | Spoilage and Shelf-Life Model | Nov 22, 2026 | ✅ Implemented |
+| M7 | Complete Two-Module Application | Nov 29, 2026 | ✅ Implemented |
+| M8 | Automated QA and Held-Out Evaluation | Dec 6, 2026 | 🟡 In progress. Held-out evaluation and latency measurements pending. |
 | M9 | End-to-End Validation and Release Candidate | Dec 13, 2026 | ⚪ Not Started |
 | M10 | Local Release, Documentation, and Submission | Dec 21, 2026 | 🟡 Documentation Started |
 
@@ -401,26 +408,69 @@ The **temperature forecasting code path is connected** across the application:
 
 ## Testing So Far
 
-The repository uses **JUnit 5** for Java/JavaFX/backend testing and **pytest** for the Python forecasting service. Tests run automatically through [GitHub Actions](.github/workflows/ci.yml) on pushes and pull requests.
+The repository uses **JUnit 5** for the Java backend and desktop client and **pytest** for the Python ML service. Tests run automatically through [GitHub Actions](.github/workflows/ci.yml) on pushes and pull requests.
 
-| Test suite | Coverage | Latest verified CI result |
+| Test suite | Coverage | Verified locally on Windows |
 |---|---|---|
-| Java — JUnit 5 | JavaFX client/form rules, CSV parsing/resampling, dataset workflow, MongoDB integration, ML HTTP contracts, auditing, and temperature forecast service | **70 passed**, 0 failed, 0 skipped (10 desktop + 60 backend) |
-| Python — pytest | ML service health, preprocessing, baselines, forecasting, inference, and warning behavior | **74 passed**, 0 failed (1 warning) |
+| Java — JUnit 5 | JavaFX client and form rules, CSV parsing, dataset workflow, MongoDB integration, ML contracts, audit API, and prediction history | **73 passed**, 0 failed, 0 skipped (11 desktop + 62 backend) |
+| Python — pytest | ML service health, preprocessing, baselines, forecasting, inference, warnings, and audit events | **75 passed**, 0 failed (1 warning) |
 
-Results above come from the [November 7, 2026 successful CI run](https://github.com/AllisonLT/CS5010-Team-Project/actions/runs/42415646944) for `main` commit `a219f05d51f155f018382e9330689e92d7215253`. The Java suite includes Docker-backed dataset integration tests; ML client contract tests use mock responses and do not substitute for real FastAPI end-to-end testing. Local test commands are provided in **Setup and Run → Build and Run Automated Tests**.
+**Testing still pending**
+
+- **Spoilage and shelf-life model** — Validate estimates for supported products, test invalid or incomplete temperature histories, and verify that results can be saved and reopened in the desktop app.
+- **Audit logs** — Focused tests already cover the audit API and FastAPI event generation. Full verification is pending for product and spoilage events, required record fields, and authenticated MongoDB permissions across both prediction workflows.
+
+Run the same suites using [Build and Run Automated Tests](#9-build-and-run-automated-tests).
 
 ## Next Steps
 
-- Complete verification of the temperature forecasting workflow using real CSV uploads and saved ML artifacts, including service failure handling.
-- Finalize approval and implement the supported spoilage/shelf-life estimation method, product profiles, and temperature-history association.
-- Implement the desktop **Shelf Life**, **Prediction History**, and **Audit Log** screens and connect them to backend persistence and inference.
-- Finish held-out model evaluation, measured prediction latency, audit-control checks, and end-to-end regression testing.
+- Integrate model training into the dataset upload workflow so validated uploads can trigger training.
+- Add unit and integration tests for spoilage inference, saved shelf-life results, and the associated audit events. Verify audit permissions and service failure handling in end-to-end tests.
+- Improve temperature forecast and spoilage model accuracy using training and validation data. Compare changes against baselines using forecast errors by horizon, spoilage-risk classification metrics, and shelf-life error where labels support it.
+- Freeze the models before running the final held-out evaluation. Record performance against the baselines and measure end-to-end prediction latency for both workflows.
 - Prepare repeatable demos and final release documentation.
+
+## Design Patterns and Principles
+
+This analysis uses the course handout *Creational Design Patterns* and examples from the current Smart Cold Storage Monitor code. It covers the JavaFX desktop, Spring Boot backend, Python ML service, and MongoDB persistence. Examples come from the implemented forecasting, dataset, prediction-history, and audit workflows.
+
+### Patterns from the course
+
+| Pattern | Where and why |
+|---|---|
+| **Builder** | `BackendClient` builds its JSON mapper, HTTP client, and requests with `builder()` or `newBuilder()`. The builders let the client configure modules, timeouts, headers, and request bodies before constructing each object. [BackendClient.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/client/BackendClient.java) |
+| **Simple Factory** | Python's `create_model(model_name)` selects an estimator and returns a scikit-learn pipeline. The training code can work with the same pipeline interface across model choices. JavaFX also keeps a registry of view suppliers in `MainWindow`, so navigation can request a screen by its identifier and construct the view when needed. [forecast_models.py](services/ml/src/cold_storage_ml/forecast_models.py#L92) · [MainWindow.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/MainWindow.java#L45) |
+| **Factory Method through a framework hook** | FastAPI's `AuditedRoute` overrides `APIRoute.get_route_handler()` to supply a handler that also records audit events. FastAPI keeps its route-dispatch logic, and the route subclass controls how the handler is constructed. [audit.py](services/ml/src/cold_storage_ml/audit.py#L82) |
+| **Singleton-style reuse and lazy initialization** | FastAPI's `get_service()` lazily caches the forecasting service after loading its model artifacts. Reuse is per Python process after initialization. Spring also uses singleton-scoped services by default within its application context. [app.py](services/ml/src/cold_storage_ml/app.py#L29) · [TemperatureForecastService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/prediction/TemperatureForecastService.java) |
+| **Constructor Dependency Injection** | Spring supplies the dataset service, ML client, prediction repository, audit service, and configuration to `TemperatureForecastService`. This lets its tests pass mocked collaborators and a fixed clock. On the desktop, `DesktopApplication` constructs a backend client and passes it into `MainWindow`. [TemperatureForecastService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/prediction/TemperatureForecastService.java#L59) · [DesktopApplication.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/DesktopApplication.java) |
+| **Object pooling through an executor** | The desktop's `Async` helper uses a cached thread pool for backend requests. Running calls off the JavaFX thread keeps the interface responsive, and idle workers can handle later calls. [Async.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/Async.java) |
+
+### Other patterns and design principles
+
+| Pattern or principle | Where and why |
+|---|---|
+| **Layered architecture and separation of concerns** | JavaFX handles interaction and display, Spring controllers expose the API, Java services coordinate workflows, and FastAPI runs model inference. The upload path also separates CSV parsing, minute resampling, and file storage so each can be tested independently. [architecture.md](docs/architecture.md) · [DatasetService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/dataset/DatasetService.java) |
+| **Repository and interface segregation** | `DatasetRepository` and `PredictionRepository` expose MongoDB persistence through repository interfaces. `AuditRepository` exposes insert and read operations, which keeps audit modification out of the application's repository API. [DatasetRepository.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/dataset/DatasetRepository.java) · [PredictionRepository.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/prediction/PredictionRepository.java) · [AuditRepository.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/audit/AuditRepository.java) |
+| **Facade and protocol adaptation** | The desktop's `BackendClient` provides methods such as `forecast()` and `predictionHistory()` and handles HTTP and JSON internally. The backend's `MlClient` maps FastAPI responses and errors into Java types, keeping transport details out of the prediction workflow. [BackendClient.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/client/BackendClient.java) · [MlClient.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/inference/MlClient.java) |
+| **Data Transfer Objects and stable contracts** | Java request and response records and Python Pydantic models define the data exchanged across HTTP. The prediction history list carries summaries, and its detail endpoint returns the stored original result. This lets the desktop reopen predictions independently of the model service and source CSV. [MlDtos.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/inference/MlDtos.java) · [inference.py](services/ml/src/cold_storage_ml/inference.py) · [PredictionHistory.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/prediction/PredictionHistory.java) |
+| **Observer and event-driven behavior** | JavaFX selection listeners refresh the active screen or show the selected audit event. Spring lifecycle listeners record backend startup and shutdown when the corresponding application events are published. [MainWindow.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/MainWindow.java#L54) · [AuditView.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/AuditView.java#L82) · [ApplicationLifecycleAudit.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/audit/ApplicationLifecycleAudit.java) |
+| **Decorator-style request wrapping** | `AuditedRoute` wraps the original FastAPI handler and records success, validation failures, or system errors around the call. This keeps audit persistence out of the model calculation. [audit.py](services/ml/src/cold_storage_ml/audit.py#L82) |
+| **Immutable state updates** | `DatasetDocument.withStatus()` creates a new record with the updated status and timestamp while preserving its other fields. Callers can retain the original metadata when a failed audit write requires a rollback. [DatasetDocument.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/dataset/DatasetDocument.java#L52) · [DatasetService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/dataset/DatasetService.java#L214) |
+| **Reuse and consistent presentation** | `ForecastView.resultContent()` renders both a new forecast and one reopened through Prediction History. The same renderer keeps temperatures, warnings, and model/version details consistent in both views. [ForecastView.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/ForecastView.java) · [PredictionHistoryView.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/PredictionHistoryView.java) |
 
 ## Team Contributions
 
-| Member | Contributions This Phase |
+### Phase 3
+
+| Member | Contributions |
+|---|---|
+| **Zi Ye** | Trained the spoilage prediction model and integrated it into the application’s prediction workflow. |
+| **Leyang Pan** | Implemented audit logging for temperature forecasts, built the JavaFX Audit Log and Prediction History screens, and connected both screens to the Spring Boot APIs. |
+| **Bo Sun** | Implemented audit logging and prediction history for spoilage forecasts, and connected the JavaFX interface to the Spring Boot APIs for retrieving those records. |
+
+### Phase 2
+
+| Member | Contributions |
 |---|---|
 | **Zi Ye** | Managed GitHub issues, milestone planning, and team progress tracking; established the repository architecture, development environment, and CI workflow; researched and documented dataset selection; contributed to full-stack development and project documentation. |
 | **Leyang Pan** | Developed and evaluated the temperature forecasting pipeline, including preprocessing and model training; implemented predictive threshold warnings and FastAPI inference endpoints; wrote Python tests, evaluation reports, and ML/Overall documentation. |

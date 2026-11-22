@@ -10,6 +10,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
@@ -19,7 +20,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.StringJoiner;
 import java.util.UUID;
 
 /**
@@ -61,6 +64,24 @@ public class BackendClient {
         return send(get("/api/v1/capabilities"), new TypeReference<>() { });
     }
 
+    public ApiModels.AuditPage auditLogs(String category, String eventType, String outcome,
+                                         Instant from, Instant to, int page) {
+        StringJoiner query = new StringJoiner("&", "/api/v1/audit-logs?", "");
+        query.add("page=" + page);
+        addFilter(query, "category", category);
+        addFilter(query, "eventType", eventType);
+        addFilter(query, "outcome", outcome);
+        addFilter(query, "from", from);
+        addFilter(query, "to", to);
+        return send(get(query.toString()), new TypeReference<>() { });
+    }
+
+    private static void addFilter(StringJoiner query, String name, Object value) {
+        if (value != null) {
+            query.add(name + "=" + URLEncoder.encode(value.toString(), StandardCharsets.UTF_8));
+        }
+    }
+
     public List<ApiModels.Dataset> datasets() {
         return send(get("/api/v1/datasets"), new TypeReference<>() { });
     }
@@ -100,6 +121,19 @@ public class BackendClient {
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    public ApiModels.PredictionPage predictionHistory(String type, Instant from, Instant to, int page) {
+        StringJoiner query = new StringJoiner("&", "/api/v1/predictions?", "");
+        query.add("page=" + page);
+        addFilter(query, "type", type);
+        addFilter(query, "from", from);
+        addFilter(query, "to", to);
+        return send(get(query.toString()), new TypeReference<>() { });
+    }
+
+    public ApiModels.ForecastResult savedForecast(String id) {
+        return send(get("/api/v1/predictions/" + id), new TypeReference<>() { });
     }
 
     static byte[] multipart(String boundary, Path file, String displayName, String sensorId) throws IOException {

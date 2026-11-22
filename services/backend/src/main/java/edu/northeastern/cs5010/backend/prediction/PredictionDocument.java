@@ -27,6 +27,7 @@ public record PredictionDocument(
         int schemaVersion,
         PredictionType type,
         String datasetId,
+        String datasetName,
         String sensorId,
         String productId,
         Map<String, Object> request,

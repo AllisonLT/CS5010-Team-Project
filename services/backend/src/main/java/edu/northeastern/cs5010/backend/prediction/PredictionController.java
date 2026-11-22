@@ -18,16 +18,25 @@ import java.util.Map;
 @RequestMapping("/api/v1/predictions")
 public class PredictionController {
     private final TemperatureForecastService temperature;
+    private final ShelfLifeService shelfLife;
     private final PredictionHistory history;
 
-    public PredictionController(TemperatureForecastService temperature, PredictionHistory history) {
+    public PredictionController(TemperatureForecastService temperature, ShelfLifeService shelfLife,
+                                PredictionHistory history) {
         this.temperature = temperature;
+        this.shelfLife = shelfLife;
         this.history = history;
     }
 
     @PostMapping("/temperature")
     public ResponseEntity<TemperatureForecast.Response> temperature(@RequestBody TemperatureForecast.Request request) {
         TemperatureForecast.Response response = temperature.forecast(request);
+        return ResponseEntity.created(URI.create("/api/v1/predictions/" + response.id())).body(response);
+    }
+
+    @PostMapping("/shelf-life")
+    public ResponseEntity<ShelfLife.Response> shelfLife(@RequestBody ShelfLife.Request request) {
+        ShelfLife.Response response = shelfLife.estimate(request);
         return ResponseEntity.created(URI.create("/api/v1/predictions/" + response.id())).body(response);
     }
 

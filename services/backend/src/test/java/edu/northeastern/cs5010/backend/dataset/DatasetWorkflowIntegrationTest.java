@@ -9,6 +9,10 @@ import edu.northeastern.cs5010.backend.audit.AuditRepository;
 import edu.northeastern.cs5010.backend.inference.MlClient;
 import edu.northeastern.cs5010.backend.inference.MlDtos;
 import edu.northeastern.cs5010.backend.prediction.PredictionDocument;
+import edu.northeastern.cs5010.backend.product.ProductDocument;
+import edu.northeastern.cs5010.backend.product.ProductRepository;
+import edu.northeastern.cs5010.backend.product.ProductStatus;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -102,6 +106,8 @@ class DatasetWorkflowIntegrationTest {
     DatasetService service;
     @Autowired
     DatasetStorage storage;
+    @Autowired
+    ProductRepository products;
     @MockitoBean
     MlClient ml;
 
@@ -109,6 +115,7 @@ class DatasetWorkflowIntegrationTest {
     void clean() throws IOException {
         mongoTemplate.dropCollection(DatasetDocument.class);
         mongoTemplate.dropCollection(PredictionDocument.class);
+        mongoTemplate.dropCollection(ProductDocument.class);
         mongoTemplate.getCollectionNames().stream().filter(name -> name.startsWith("audit_"))
                 .forEach(mongoTemplate::dropCollection);
         try (Stream<Path> files = Files.walk(uploads)) {
@@ -176,6 +183,136 @@ class DatasetWorkflowIntegrationTest {
         mvc.perform(get("/api/v1/predictions/missing")).andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PREDICTION_NOT_FOUND"));
         verify(ml).forecastTemperature(any());
+    }
+
+    @Test
+    void shelfLifeEstimateIsSavedAuditedAndListedWithTheProductName() throws Exception {
+        var start = LocalDateTime.of(2024, 9, 8, 18, 5);
+        var format = DateTimeFormatter.ofPattern("dd.MM.uuuu;HH:mm:ss");
+        String csv = "Date;Time;Temperature;Humidity\n" + String.join("\n", IntStream.range(0, 90)
+                .mapToObj(minute -> start.plusMinutes(minute).format(format) + ";" + (minute < 60 ? "4.0" : "9.0")
+                        + ";70.0").toList());
+        var uploaded = upload("SENSOR02_preprocessed.csv", csv, "displayName", "Cold room 2");
+        String datasetId = json.readTree(uploaded.getResponse().getContentAsString()).get("id").asText();
+        String productId = "0b9a7c2e-3e1f-4c55-9d8e-2a7d5b8f9e40";
+        products.insert(new ProductDocument(productId, 1, "Chicken breast batch 14", "FRESH_POULTRY_AEROBIC", 2.0,
+                1.0, new ProductDocument.TemperatureSource(datasetId, "SENSOR02", "2024-09-08T18:05:00",
+                "2024-09-08T19:34:00"), null, ProductStatus.ACTIVE, null, Instant.EPOCH, Instant.EPOCH));
+
+        when(ml.estimateShelfLife(any())).thenReturn(new MlDtos.ShelfLifeResponse("FRESH_POULTRY_AEROBIC",
+                "2024-09-08T18:05:00", "2024-09-08T19:34:00", 9.0, 30.5, 0.86, "high", 6.4, false,
+                new MlDtos.ShelfLifeFactors(30, 9.0, 5.7, 0.62), 0, List.of(),
+                List.of("Modeled estimate for fresh poultry in aerobic storage. Not a food safety determination."),
+                Map.of("name", "pseudomonads_square_root", "version", "tsaloumi2022-v1",
+                        "citation_doi", "10.1016/j.psj.2022.101985"), "celsius"));
+        var created = mvc.perform(post("/api/v1/predictions/shelf-life").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("productId", productId))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.type").value("SHELF_LIFE"))
+                .andExpect(jsonPath("$.spoilageRisk").value("HIGH"))
+                .andExpect(jsonPath("$.factors.minutesAbove4C").value(30))
+                .andExpect(jsonPath("$.temperatureSource.end").value("2024-09-08T19:34:00"))
+                .andReturn();
+        JsonNode original = json.readTree(created.getResponse().getContentAsString());
+        String predictionId = original.get("id").asText();
+
+        // The model received every minute of the linked window, read from the stored minute.csv.
+        ArgumentCaptor<MlDtos.ShelfLifeRequest> sent = ArgumentCaptor.forClass(MlDtos.ShelfLifeRequest.class);
+        verify(ml).estimateShelfLife(sent.capture());
+        assertThat(sent.getValue().history()).hasSize(90);
+        assertThat(sent.getValue().history().getLast().temperatureC()).isEqualTo(9.0);
+
+        mvc.perform(get("/api/v1/predictions").param("type", "SHELF_LIFE").param("productId", productId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItems").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(predictionId))
+                .andExpect(jsonPath("$.items[0].productName").value("Chicken breast batch 14"))
+                .andExpect(jsonPath("$.items[0].datasetName").value("Cold room 2"))
+                .andExpect(jsonPath("$.items[0].modelVersion").value("tsaloumi2022-v1"));
+        var reopened = mvc.perform(get(created.getResponse().getHeader("Location")))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(reopened.getResponse().getContentAsString())).isEqualTo(original);
+
+        AuditRecord createdAudit = auditOf(AuditEventType.PREDICTION_CREATED).getFirst();
+        assertThat(createdAudit.refs().productId()).isEqualTo(productId);
+        assertThat(createdAudit.refs().predictionId()).isEqualTo(predictionId);
+        assertThat(createdAudit.details()).containsEntry("predictionType", "SHELF_LIFE");
+        assertThat(auditOf(AuditEventType.SPOILAGE_RISK_HIGH)).singleElement()
+                .satisfies(record -> assertThat(record.refs().predictionId()).isEqualTo(predictionId));
+
+        // A product without a temperature link is refused, audited, and leaves no result behind.
+        products.insert(new ProductDocument("unlinked", 1, "Unlinked batch", "FRESH_POULTRY_AEROBIC", null, null,
+                null, null, ProductStatus.ACTIVE, null, Instant.EPOCH, Instant.EPOCH));
+        mvc.perform(post("/api/v1/predictions/shelf-life").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productId\":\"unlinked\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("PRODUCT_NOT_LINKED"))
+                .andExpect(jsonPath("$.auditId").isNotEmpty());
+        assertThat(auditOf(AuditEventType.PREDICTION_FAILED)).singleElement()
+                .satisfies(record -> assertThat(record.refs().productId()).isEqualTo("unlinked"));
+        mvc.perform(get("/api/v1/predictions").param("type", "SHELF_LIFE"))
+                .andExpect(jsonPath("$.totalItems").value(1));
+    }
+
+    @Test
+    void productIsCreatedLinkedEditedWithVersionCheckAndSoftDeleted() throws Exception {
+        var uploaded = upload("SENSOR02_preprocessed.csv", VALID, "displayName", "Cold room 2");
+        String datasetId = json.readTree(uploaded.getResponse().getContentAsString()).get("id").asText();
+        Map<String, Object> link = Map.of("datasetId", datasetId, "sensorId", "SENSOR02",
+                "start", "2024-09-02T09:36:00", "end", "2024-09-02T09:40:00");
+
+        var created = mvc.perform(post("/api/v1/products").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "Chicken breast batch 14",
+                                "category", "FRESH_POULTRY_AEROBIC", "temperatureSource", link))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.initialLogCount").value(2.0))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.version").value(0))
+                .andExpect(jsonPath("$.temperatureSource.sensorId").value("SENSOR02"))
+                .andReturn();
+        String id = json.readTree(created.getResponse().getContentAsString()).get("id").asText();
+        assertThat(created.getResponse().getHeader("Location")).isEqualTo("/api/v1/products/" + id);
+
+        mvc.perform(get("/api/v1/products")).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(id));
+
+        // Two edits from the same starting version: the second one must not overwrite the first.
+        Map<String, Object> edit = Map.of("name", "Batch 14 (moved)", "category", "FRESH_POULTRY_AEROBIC",
+                "initialLogCount", 3.0, "temperatureSource", link, "version", 0);
+        mvc.perform(put("/api/v1/products/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(edit)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Batch 14 (moved)"))
+                .andExpect(jsonPath("$.version").value(1));
+        mvc.perform(put("/api/v1/products/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "Stale edit", "category",
+                                "FRESH_POULTRY_AEROBIC", "version", 0))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+        mvc.perform(get("/api/v1/products/{id}", id)).andExpect(jsonPath("$.name").value("Batch 14 (moved)"))
+                .andExpect(jsonPath("$.initialLogCount").value(3.0));
+
+        // A window outside the dataset is refused with the field that is wrong.
+        mvc.perform(post("/api/v1/products").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "Outside", "category", "FRESH_POULTRY_AEROBIC",
+                                "temperatureSource", Map.of("datasetId", datasetId, "sensorId", "SENSOR02",
+                                        "start", "2024-09-02T09:00:00", "end", "2024-09-02T09:40:00")))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].field").value("temperatureSource.start"));
+
+        mvc.perform(delete("/api/v1/products/{id}", id)).andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/products/{id}", id)).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PRODUCT_NOT_FOUND"));
+        mvc.perform(get("/api/v1/products")).andExpect(jsonPath("$.length()").value(0));
+        assertThat(products.findById(id)).get().satisfies(p -> assertThat(p.status()).isEqualTo(ProductStatus.DELETED));
+
+        assertThat(auditOf(AuditEventType.PRODUCT_CREATED)).hasSize(2)
+                .extracting(AuditRecord::outcome)
+                .containsExactlyInAnyOrder(AuditRecord.Outcome.SUCCESS, AuditRecord.Outcome.FAILURE);
+        assertThat(auditOf(AuditEventType.PRODUCT_UPDATED)).extracting(AuditRecord::outcome)
+                .containsExactly(AuditRecord.Outcome.FAILURE, AuditRecord.Outcome.SUCCESS);
+        assertThat(auditOf(AuditEventType.PRODUCT_DELETED)).singleElement()
+                .satisfies(record -> assertThat(record.refs().productId()).isEqualTo(id));
     }
 
     private MvcResult upload(String filename, String content, String... params) throws Exception {

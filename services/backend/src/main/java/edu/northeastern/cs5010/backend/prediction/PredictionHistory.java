@@ -3,6 +3,7 @@ package edu.northeastern.cs5010.backend.prediction;
 import edu.northeastern.cs5010.backend.api.ApiError;
 import edu.northeastern.cs5010.backend.api.ApiException;
 import edu.northeastern.cs5010.backend.dataset.DatasetRepository;
+import edu.northeastern.cs5010.backend.product.ProductRepository;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -21,11 +22,14 @@ public class PredictionHistory {
     private final MongoTemplate mongo;
     private final PredictionRepository predictions;
     private final DatasetRepository datasets;
+    private final ProductRepository products;
 
-    public PredictionHistory(MongoTemplate mongo, PredictionRepository predictions, DatasetRepository datasets) {
+    public PredictionHistory(MongoTemplate mongo, PredictionRepository predictions, DatasetRepository datasets,
+                             ProductRepository products) {
         this.mongo = mongo;
         this.predictions = predictions;
         this.datasets = datasets;
+        this.products = products;
     }
 
     public record Summary(String id, PredictionDocument.PredictionType type, Instant createdAt, String datasetId,
@@ -82,10 +86,20 @@ public class PredictionHistory {
             datasets.findAllById(legacyIds).forEach(dataset -> legacyNames.put(dataset.id(), dataset.displayName()));
         }
 
+        // Shelf-life estimates show the product's current name. Deleted products are only marked DELETED, so
+        // their names still resolve.
+        List<String> productIds = records.stream().map(PredictionDocument::productId).filter(Objects::nonNull)
+                .distinct().toList();
+        Map<String, String> productNames = new HashMap<>();
+        if (!productIds.isEmpty()) {
+            products.findAllById(productIds).forEach(product -> productNames.put(product.id(), product.name()));
+        }
+
         List<Summary> items = records.stream().map(record -> new Summary(record.id(), record.type(), record.createdAt(),
                 record.datasetId(), record.datasetName() == null ? legacyNames.get(record.datasetId())
                         : record.datasetName(),
-                record.sensorId(), record.productId(), null, record.summary().headline(), record.model().version()))
+                record.sensorId(), record.productId(), productNames.get(record.productId()),
+                record.summary().headline(), record.model().version()))
                 .toList();
         return new Page(items, page, size, total);
     }

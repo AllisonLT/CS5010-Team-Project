@@ -1,6 +1,6 @@
 # Smart Cold Storage Monitor
 
-Smart Cold Storage Monitor is a local desktop application for cold-storage managers who need to monitor historical temperature conditions and identify possible temperature excursions before they occur. Users can upload sensor CSV datasets, inspect processed measurements, and request short-term temperature forecasts and predictive threshold warnings. The system uses a **JavaFX** desktop UI, a **Spring Boot** REST backend, a **Python FastAPI** forecasting service, and **MongoDB** for application metadata, prediction records, and audit logs. Food spoilage-risk and remaining shelf-life estimation are part of the planned second module and are not yet implemented.
+Smart Cold Storage Monitor is a local desktop application for cold-storage managers who need to monitor historical temperature conditions and identify possible temperature excursions before they occur. Users can upload sensor CSV datasets, inspect processed measurements, and request short-term temperature forecasts and predictive threshold warnings. The system uses a **JavaFX** desktop UI, a **Spring Boot** REST backend, a **Python FastAPI** forecasting service, and **MongoDB** for application metadata, prediction records, and audit logs. The second module, food spoilage-risk and remaining shelf-life estimation, is partly implemented: the backend product and shelf-life APIs are done, while the ML shelf-life endpoint and its desktop screens are still in progress.
 
 ## Team
 
@@ -30,7 +30,9 @@ CS5010-Team-Project/
 │   └── artifacts/            Saved ML artifacts (not committed)
 ├── docs/                     Architecture, API contracts, model reports, and development guides
 ├── .github/workflows/        GitHub Actions build/test pipeline
+├── scripts/                  MongoDB setup for the audit-only database accounts
 ├── compose.yaml              Local MongoDB service configuration
+├── compose.audit.yaml        Optional MongoDB configuration with authentication for audit permissions
 ├── pom.xml                   Parent Maven project
 ├── PROJECT_TIMELINE.md       Milestone plan and acceptance criteria
 └── README.md                 Project overview and local setup instructions
@@ -395,21 +397,7 @@ Statuses compare the code on this branch with the **Phase 1 SRS functional requi
 | FR-19: Audit records can only be inserted and read | Complete | `AuditRepository` (insert/read only), `AuditController` rejects changes with 405; MongoDB accounts in [`scripts/setup-mongo-audit.js`](scripts/setup-mongo-audit.js) |
 | FR-20: View audit records in a read-only table filtered by type and date | Complete | `AuditController` (`/api/v1/audit-logs`); `AuditView` filters by category, event, outcome, and date |
 
-## Scope and Design Changes Since Phase 1
-
-| Change | Reason |
-|---|---|
-| Temperature data comes from Zenodo record 15130001 instead of Kaggle | It is real sensor data from a cold storage room (5-second readings, 2–11 September 2024), which fits our scenario, and it is openly licensed under CC BY 4.0 ([`docs/dataset_selection.md`](docs/dataset_selection.md)). |
-| Module 2 uses a published, validated microbial growth model (Tsaloumi et al. 2022, fresh poultry) instead of a trained ML model or a generic Q10 factor | No public dataset with spoilage labels matched our temperature data (see [`docs/spoilage_dataset_selection.md`](docs/spoilage_dataset_selection.md)). A square-root growth model validated for poultry is more defensible than one Q10 value per category ([`docs/shelf_life_feasibility.md`](docs/shelf_life_feasibility.md)). |
-| Only one product category, `FRESH_POULTRY_AEROBIC` | The growth model's parameters are validated for that product only. The `category` field stays so more categories can be added later. |
-| Product profiles store the initial microbial load (N0) and physiological state (α0) instead of "recommended temperature" and "initial shelf life" | Remaining shelf life is now calculated by the growth model, so the user enters the model's inputs rather than a shelf life. |
-| Forecast period is fixed at 15, 30, and 60 minutes instead of a free period such as 6 hours | The data has one-minute resolution and accuracy falls quickly with distance; three fixed horizons can each be trained and validated. |
-| Point forecasts use a damped-trend method, and warnings use quantile models of the future peak, instead of one XGBoost regressor | On validation data the persistence baseline beat Ridge, Random Forest, and HistGradientBoosting; damped trend was the only candidate that improved on it ([`docs/model_improvement_experiment.md`](docs/model_improvement_experiment.md)). |
-| Short gaps are not filled at upload; minutes with too few readings are stored as missing | Filling gaps would feed invented values to the forecasting model. The backend now matches the ML preprocessing exactly (checked against a shared fixture), forecasts require 61 complete minutes, and the shelf-life model bridges gaps of up to 10 minutes itself. |
-| CSV parsing uses our own `CsvParser` instead of Apache Commons CSV | It reads the dataset's semicolon layout, reports every invalid row with its reason, and keeps the same rules as the Python preprocessing. |
-| Desktop screens are built in Java code instead of FXML | Screens share layout helpers (`Views`, `MainWindow`), which kept them consistent with less duplication. |
-| Docker Compose starts only MongoDB; the two services run from Maven and Python | JavaFX needs the local desktop, and running the services directly made debugging easier during development. |
-| Audit records are split into one MongoDB collection per category, with separate database accounts for the backend and the ML service | Each service can be limited to inserting into its own collections, which enforces FR-19 in the database and not only in code. |
+## Progress
 
 ### Milestone Tracker
 
@@ -442,6 +430,52 @@ The project is tracked across ten milestones. See [PROJECT_TIMELINE.md](PROJECT_
 
 **Shelf-life estimation (Module 2)** works from the backend API down: a product created through `/api/v1/products` and linked to a dataset window can be estimated through `/api/v1/predictions/shelf-life`, and the result is saved, audited, and listed in the prediction history API. It still needs the ML shelf-life endpoint and the desktop screens.
 
+## Scope and Design Changes Since Phase 1
+
+| Change | Reason |
+|---|---|
+| Temperature data comes from Zenodo record 15130001 instead of Kaggle | It is real sensor data from a cold storage room (5-second readings, 2–11 September 2024), which fits our scenario, and it is openly licensed under CC BY 4.0 ([`docs/dataset_selection.md`](docs/dataset_selection.md)). |
+| Module 2 uses a published, validated microbial growth model (Tsaloumi et al. 2022, fresh poultry) instead of a trained ML model or a generic Q10 factor | No public dataset with spoilage labels matched our temperature data (see [`docs/spoilage_dataset_selection.md`](docs/spoilage_dataset_selection.md)). A square-root growth model validated for poultry is more defensible than one Q10 value per category ([`docs/shelf_life_feasibility.md`](docs/shelf_life_feasibility.md)). |
+| Only one product category, `FRESH_POULTRY_AEROBIC` | The growth model's parameters are validated for that product only. The `category` field stays so more categories can be added later. |
+| Product profiles store the initial microbial load (N0) and physiological state (α0) instead of "recommended temperature" and "initial shelf life" | Remaining shelf life is now calculated by the growth model, so the user enters the model's inputs rather than a shelf life. |
+| Forecast period is fixed at 15, 30, and 60 minutes instead of a free period such as 6 hours | The data has one-minute resolution and accuracy falls quickly with distance; three fixed horizons can each be trained and validated. |
+| Point forecasts use a damped-trend method, and warnings use quantile models of the future peak, instead of one XGBoost regressor | On validation data the persistence baseline beat Ridge, Random Forest, and HistGradientBoosting; damped trend was the only candidate that improved on it ([`docs/model_improvement_experiment.md`](docs/model_improvement_experiment.md)). |
+| Short gaps are not filled at upload; minutes with too few readings are stored as missing | Filling gaps would feed invented values to the forecasting model. The backend now matches the ML preprocessing exactly (checked against a shared fixture), forecasts require 61 complete minutes, and the shelf-life model bridges gaps of up to 10 minutes itself. |
+| CSV parsing uses our own `CsvParser` instead of Apache Commons CSV | It reads the dataset's semicolon layout, reports every invalid row with its reason, and keeps the same rules as the Python preprocessing. |
+| Desktop screens are built in Java code instead of FXML | Screens share layout helpers (`Views`, `MainWindow`), which kept them consistent with less duplication. |
+| Docker Compose starts only MongoDB; the two services run from Maven and Python | JavaFX needs the local desktop, and running the services directly made debugging easier during development. |
+| Audit records are split into one MongoDB collection per category, with separate database accounts for the backend and the ML service | Each service can be limited to inserting into its own collections, which enforces FR-19 in the database and not only in code. |
+
+## Design Patterns and Principles Applied
+
+Examples come from the implemented dataset, forecasting, shelf-life, product, prediction-history, and audit code across the JavaFX desktop, Spring Boot backend, Python ML service, and MongoDB. The first table covers patterns from the course handout *Creational Design Patterns*; the second covers other patterns and principles.
+
+### Patterns from the course
+
+| Pattern / Principle | Where | Why |
+|---|---|---|
+| **Builder** | `BackendClient` builds its JSON mapper, HTTP client, and each request with `builder()` / `newBuilder()` ([BackendClient.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/client/BackendClient.java)) | Modules, timeouts, headers, and bodies are configured step by step before the object is created, instead of through long constructors. |
+| **Simple Factory** | Python `create_model(model_name)` ([forecast_models.py](services/ml/src/cold_storage_ml/forecast_models.py#L92)); the view-supplier registry in `MainWindow` ([MainWindow.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/MainWindow.java#L45)) | Training code gets the same pipeline interface for every model choice, and navigation asks for a screen by its identifier and builds it only when needed. |
+| **Factory Method (framework hook)** | FastAPI `AuditedRoute` overrides `APIRoute.get_route_handler()` ([audit.py](services/ml/src/cold_storage_ml/audit.py#L82)) | FastAPI keeps its dispatch logic, while our subclass decides how each handler is built so it also records audit events. |
+| **Singleton-style reuse, lazy initialization** | FastAPI `get_service()` ([app.py](services/ml/src/cold_storage_ml/app.py#L29)); Spring's singleton-scoped services such as `TemperatureForecastService` | Model artifacts are loaded once per process on first use, and every request shares the same service instance. |
+| **Constructor Dependency Injection** | `TemperatureForecastService`, `ShelfLifeService`, `ProductService` receive their repositories, `MlClient`, `AuditService`, and settings through constructors ([TemperatureForecastService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/prediction/TemperatureForecastService.java#L59)); `DesktopApplication` passes a `BackendClient` into `MainWindow` | Classes do not create their own collaborators, so tests pass mocks and a fixed clock without starting MongoDB or FastAPI. |
+| **Object pool (executor)** | The desktop `Async` helper's cached thread pool ([Async.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/Async.java)) | Backend calls run off the JavaFX thread, so the window stays responsive, and idle worker threads are reused for later calls. |
+
+### Other patterns and design principles
+
+| Pattern / Principle | Where | Why |
+|---|---|---|
+| **Layered architecture, separation of concerns** | JavaFX views → Spring controllers → Java services → FastAPI inference ([architecture.md](docs/architecture.md)); the upload path splits `CsvParser`, `MinuteResampler`, and `DatasetStorage` ([DatasetService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/dataset/DatasetService.java)) | Each layer has one job, and each step of the upload can be tested on its own. |
+| **Thin controllers, single responsibility** | `ProductController` and `PredictionController` only map HTTP; rules live in `ProductService` and `ShelfLifeService` ([ProductService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/product/ProductService.java), [ShelfLifeService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/prediction/ShelfLifeService.java)) | Business rules can be unit-tested without HTTP, and each class changes for one reason. |
+| **Repository, interface segregation** | `DatasetRepository`, `PredictionRepository`, `ProductRepository`; `AuditRepository` exposes only insert and read ([AuditRepository.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/audit/AuditRepository.java)) | MongoDB details stay in one layer, and no application code is given a way to modify audit records (FR-19). |
+| **Facade, protocol adaptation** | Desktop `BackendClient` (`forecast()`, `predictionHistory()`, …); backend `MlClient` ([MlClient.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/inference/MlClient.java)) | Callers use plain Java methods and types; HTTP, JSON, and FastAPI error formats are handled in one place. |
+| **Data Transfer Objects, stable contracts** | Java records such as `MlDtos`, `TemperatureForecast`, `ShelfLife`, `Products`; Python Pydantic models ([inference.py](services/ml/src/cold_storage_ml/inference.py)); versioned examples in [`docs/contracts/examples`](docs/contracts/examples) | Both sides of each API agree on one documented shape, and contract tests catch changes. Saved results can be reopened without the model service or source CSV. |
+| **Optimistic concurrency control** | `@Version` field on `ProductDocument` ([ProductDocument.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/product/ProductDocument.java)) | An edit made from an outdated copy is refused with `409 VERSION_CONFLICT` instead of silently overwriting a newer change, without locking records. |
+| **Observer, event-driven behavior** | JavaFX selection listeners in `MainWindow` and `AuditView`; Spring lifecycle listener `ApplicationLifecycleAudit` ([ApplicationLifecycleAudit.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/audit/ApplicationLifecycleAudit.java)) | Screens react to user selection, and startup/shutdown are audited without the code that starts the app knowing about auditing. |
+| **Decorator-style request wrapping** | `AuditedRoute` wraps each FastAPI handler ([audit.py](services/ml/src/cold_storage_ml/audit.py#L82)) | Success, validation failure, and system errors are audited around the call, keeping audit code out of the model calculation. |
+| **Immutable records, compensating actions** | `DatasetDocument.withStatus()`, `ProductDocument.withVersion()`; the audit-then-undo steps in `DatasetService`, `ProductService`, and `ShelfLifeService` | The previous state is kept as an unchanged value, so a change whose audit record cannot be written is undone exactly (docs/audit_controls.md). |
+| **Reuse, consistent presentation** | `ForecastView.resultContent()` used by both `ForecastView` and `PredictionHistoryView` | A new forecast and a reopened one are displayed identically. |
+
 ## Testing
 
 The repository uses **JUnit 5, Mockito, and AssertJ** for Java and **pytest** for Python. GitHub Actions runs every suite on each push and pull request ([ci.yml](.github/workflows/ci.yml)).
@@ -473,36 +507,6 @@ On Windows use `.\mvnw.cmd` and `.\.venv\Scripts\python.exe`. Without Docker, th
 - Freeze the models, run the held-out evaluation for both modules, and measure end-to-end latency.
 - Add coverage reports and end-to-end failure tests (ML service or MongoDB unavailable).
 - Prepare repeatable demos and the final documentation.
-
-## Design Patterns and Principles Applied
-
-This analysis uses the course handout *Creational Design Patterns* and examples from the current Smart Cold Storage Monitor code. It covers the JavaFX desktop, Spring Boot backend, Python ML service, and MongoDB persistence. Examples come from the implemented forecasting, dataset, prediction-history, and audit workflows.
-
-### Patterns from the course
-
-| Pattern | Where and why |
-|---|---|
-| **Builder** | `BackendClient` builds its JSON mapper, HTTP client, and requests with `builder()` or `newBuilder()`. The builders let the client configure modules, timeouts, headers, and request bodies before constructing each object. [BackendClient.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/client/BackendClient.java) |
-| **Simple Factory** | Python's `create_model(model_name)` selects an estimator and returns a scikit-learn pipeline. The training code can work with the same pipeline interface across model choices. JavaFX also keeps a registry of view suppliers in `MainWindow`, so navigation can request a screen by its identifier and construct the view when needed. [forecast_models.py](services/ml/src/cold_storage_ml/forecast_models.py#L92) · [MainWindow.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/MainWindow.java#L45) |
-| **Factory Method through a framework hook** | FastAPI's `AuditedRoute` overrides `APIRoute.get_route_handler()` to supply a handler that also records audit events. FastAPI keeps its route-dispatch logic, and the route subclass controls how the handler is constructed. [audit.py](services/ml/src/cold_storage_ml/audit.py#L82) |
-| **Singleton-style reuse and lazy initialization** | FastAPI's `get_service()` lazily caches the forecasting service after loading its model artifacts. Reuse is per Python process after initialization. Spring also uses singleton-scoped services by default within its application context. [app.py](services/ml/src/cold_storage_ml/app.py#L29) · [TemperatureForecastService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/prediction/TemperatureForecastService.java) |
-| **Constructor Dependency Injection** | Spring supplies the dataset service, ML client, prediction repository, audit service, and configuration to `TemperatureForecastService`. This lets its tests pass mocked collaborators and a fixed clock. On the desktop, `DesktopApplication` constructs a backend client and passes it into `MainWindow`. [TemperatureForecastService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/prediction/TemperatureForecastService.java#L59) · [DesktopApplication.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/DesktopApplication.java) |
-| **Object pooling through an executor** | The desktop's `Async` helper uses a cached thread pool for backend requests. Running calls off the JavaFX thread keeps the interface responsive, and idle workers can handle later calls. [Async.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/Async.java) |
-
-### Other patterns and design principles
-
-| Pattern or principle | Where and why |
-|---|---|
-| **Layered architecture and separation of concerns** | JavaFX handles interaction and display, Spring controllers expose the API, Java services coordinate workflows, and FastAPI runs model inference. The upload path also separates CSV parsing, minute resampling, and file storage so each can be tested independently. [architecture.md](docs/architecture.md) · [DatasetService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/dataset/DatasetService.java) |
-| **Repository and interface segregation** | `DatasetRepository`, `PredictionRepository`, and `ProductRepository` expose MongoDB persistence through repository interfaces. `AuditRepository` exposes insert and read operations, which keeps audit modification out of the application's repository API. [DatasetRepository.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/dataset/DatasetRepository.java) · [PredictionRepository.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/prediction/PredictionRepository.java) · [AuditRepository.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/audit/AuditRepository.java) |
-| **Facade and protocol adaptation** | The desktop's `BackendClient` provides methods such as `forecast()` and `predictionHistory()` and handles HTTP and JSON internally. The backend's `MlClient` maps FastAPI responses and errors into Java types, keeping transport details out of the prediction workflow. [BackendClient.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/client/BackendClient.java) · [MlClient.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/inference/MlClient.java) |
-| **Data Transfer Objects and stable contracts** | Java request and response records and Python Pydantic models define the data exchanged across HTTP. The prediction history list carries summaries, and its detail endpoint returns the stored original result. This lets the desktop reopen predictions independently of the model service and source CSV. [MlDtos.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/inference/MlDtos.java) · [inference.py](services/ml/src/cold_storage_ml/inference.py) · [PredictionHistory.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/prediction/PredictionHistory.java) |
-| **Observer and event-driven behavior** | JavaFX selection listeners refresh the active screen or show the selected audit event. Spring lifecycle listeners record backend startup and shutdown when the corresponding application events are published. [MainWindow.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/MainWindow.java#L54) · [AuditView.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/AuditView.java#L82) · [ApplicationLifecycleAudit.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/audit/ApplicationLifecycleAudit.java) |
-| **Decorator-style request wrapping** | `AuditedRoute` wraps the original FastAPI handler and records success, validation failures, or system errors around the call. This keeps audit persistence out of the model calculation. [audit.py](services/ml/src/cold_storage_ml/audit.py#L82) |
-| **Immutable state updates** | `DatasetDocument.withStatus()` creates a new record with the updated status and timestamp while preserving its other fields. Callers can retain the original metadata when a failed audit write requires a rollback. [DatasetDocument.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/dataset/DatasetDocument.java#L52) · [DatasetService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/dataset/DatasetService.java#L214) |
-| **Thin controllers and single responsibility** | `ProductController` and `PredictionController` only map HTTP to calls; `ProductService` holds the product rules and `ShelfLifeService` the shelf-life workflow, while `MlClient` talks to FastAPI and the repositories talk to MongoDB. Each class can be tested with mocks of the others. [ProductService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/product/ProductService.java) · [ShelfLifeService.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/prediction/ShelfLifeService.java) |
-| **Optimistic concurrency control** | `ProductDocument` carries a `@Version` field. An edit made from an outdated copy is refused with `409 VERSION_CONFLICT` instead of silently overwriting a newer change, without locking the record. [ProductDocument.java](services/backend/src/main/java/edu/northeastern/cs5010/backend/product/ProductDocument.java) |
-| **Reuse and consistent presentation** | `ForecastView.resultContent()` renders both a new forecast and one reopened through Prediction History. The same renderer keeps temperatures, warnings, and model/version details consistent in both views. [ForecastView.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/ForecastView.java) · [PredictionHistoryView.java](apps/desktop/src/main/java/edu/northeastern/cs5010/desktop/ui/PredictionHistoryView.java) |
 
 ## Team Contributions
 

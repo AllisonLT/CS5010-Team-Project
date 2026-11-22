@@ -254,6 +254,67 @@ class DatasetWorkflowIntegrationTest {
                 .andExpect(jsonPath("$.totalItems").value(1));
     }
 
+    @Test
+    void productIsCreatedLinkedEditedWithVersionCheckAndSoftDeleted() throws Exception {
+        var uploaded = upload("SENSOR02_preprocessed.csv", VALID, "displayName", "Cold room 2");
+        String datasetId = json.readTree(uploaded.getResponse().getContentAsString()).get("id").asText();
+        Map<String, Object> link = Map.of("datasetId", datasetId, "sensorId", "SENSOR02",
+                "start", "2024-09-02T09:36:00", "end", "2024-09-02T09:40:00");
+
+        var created = mvc.perform(post("/api/v1/products").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "Chicken breast batch 14",
+                                "category", "FRESH_POULTRY_AEROBIC", "temperatureSource", link))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.initialLogCount").value(2.0))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.version").value(0))
+                .andExpect(jsonPath("$.temperatureSource.sensorId").value("SENSOR02"))
+                .andReturn();
+        String id = json.readTree(created.getResponse().getContentAsString()).get("id").asText();
+        assertThat(created.getResponse().getHeader("Location")).isEqualTo("/api/v1/products/" + id);
+
+        mvc.perform(get("/api/v1/products")).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(id));
+
+        // Two edits from the same starting version: the second one must not overwrite the first.
+        Map<String, Object> edit = Map.of("name", "Batch 14 (moved)", "category", "FRESH_POULTRY_AEROBIC",
+                "initialLogCount", 3.0, "temperatureSource", link, "version", 0);
+        mvc.perform(put("/api/v1/products/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(edit)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Batch 14 (moved)"))
+                .andExpect(jsonPath("$.version").value(1));
+        mvc.perform(put("/api/v1/products/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "Stale edit", "category",
+                                "FRESH_POULTRY_AEROBIC", "version", 0))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+        mvc.perform(get("/api/v1/products/{id}", id)).andExpect(jsonPath("$.name").value("Batch 14 (moved)"))
+                .andExpect(jsonPath("$.initialLogCount").value(3.0));
+
+        // A window outside the dataset is refused with the field that is wrong.
+        mvc.perform(post("/api/v1/products").contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "Outside", "category", "FRESH_POULTRY_AEROBIC",
+                                "temperatureSource", Map.of("datasetId", datasetId, "sensorId", "SENSOR02",
+                                        "start", "2024-09-02T09:00:00", "end", "2024-09-02T09:40:00")))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].field").value("temperatureSource.start"));
+
+        mvc.perform(delete("/api/v1/products/{id}", id)).andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/products/{id}", id)).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PRODUCT_NOT_FOUND"));
+        mvc.perform(get("/api/v1/products")).andExpect(jsonPath("$.length()").value(0));
+        assertThat(products.findById(id)).get().satisfies(p -> assertThat(p.status()).isEqualTo(ProductStatus.DELETED));
+
+        assertThat(auditOf(AuditEventType.PRODUCT_CREATED)).hasSize(2)
+                .extracting(AuditRecord::outcome)
+                .containsExactlyInAnyOrder(AuditRecord.Outcome.SUCCESS, AuditRecord.Outcome.FAILURE);
+        assertThat(auditOf(AuditEventType.PRODUCT_UPDATED)).extracting(AuditRecord::outcome)
+                .containsExactly(AuditRecord.Outcome.FAILURE, AuditRecord.Outcome.SUCCESS);
+        assertThat(auditOf(AuditEventType.PRODUCT_DELETED)).singleElement()
+                .satisfies(record -> assertThat(record.refs().productId()).isEqualTo(id));
+    }
+
     private MvcResult upload(String filename, String content, String... params) throws Exception {
         var request = multipart("/api/v1/datasets")
                 .file(new MockMultipartFile("file", filename, "text/csv", content.getBytes(StandardCharsets.UTF_8)));

@@ -328,6 +328,11 @@ The UI uses `predictedMinTemperatureC` and `predictedMaxTemperatureC` for the PD
 
 `futureTemperatureC` is optional (default: last reading in the linked window) and must be 0–30.
 
+Before calling the ML service, the backend sends one entry per minute of the linked window. Missing minutes at
+either end are dropped (API B needs a reading in the first and last entry), so `temperatureSource` in the response
+is the window actually used. A run of more than 10 missing minutes, or fewer than 60 / more than 20,160 minutes
+after trimming, returns `422 INSUFFICIENT_HISTORY` without calling the model.
+
 The backend loads the product, reads its linked window from `minute.csv`, calls `POST /api/v1/predictions/shelf-life` on the ML service, saves and audits the result, and returns **201 Created**:
 
 ```json

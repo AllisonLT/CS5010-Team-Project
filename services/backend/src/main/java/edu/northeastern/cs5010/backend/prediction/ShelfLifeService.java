@@ -16,6 +16,7 @@ import edu.northeastern.cs5010.backend.inference.MlDtos;
 import edu.northeastern.cs5010.backend.inference.MlException;
 import edu.northeastern.cs5010.backend.product.ProductDocument;
 import edu.northeastern.cs5010.backend.product.ProductRepository;
+import edu.northeastern.cs5010.backend.product.ProductService;
 import edu.northeastern.cs5010.backend.product.ProductStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -44,9 +45,6 @@ import java.util.UUID;
  */
 @Service
 public class ShelfLifeService {
-    public static final String SUPPORTED_CATEGORY = "FRESH_POULTRY_AEROBIC";
-    static final double DEFAULT_INITIAL_LOG_COUNT = 2.0;
-    static final double DEFAULT_ALPHA0 = 1.0;
     static final double MIN_FUTURE_TEMPERATURE_C = 0.0;
     static final double MAX_FUTURE_TEMPERATURE_C = 30.0;
     /** API B accepts 60 to 20,160 one-minute readings (one hour to 14 days). */
@@ -114,8 +112,8 @@ public class ShelfLifeService {
         MlDtos.ShelfLifeResponse result;
         try {
             result = ml.estimateShelfLife(new MlDtos.ShelfLifeRequest(product.category(),
-                    orDefault(product.initialLogCount(), DEFAULT_INITIAL_LOG_COUNT),
-                    orDefault(product.physiologicalStateAlpha0(), DEFAULT_ALPHA0),
+                    orDefault(product.initialLogCount(), ProductService.DEFAULT_INITIAL_LOG_COUNT),
+                    orDefault(product.physiologicalStateAlpha0(), ProductService.DEFAULT_ALPHA0),
                     request.futureTemperatureC(), 1, history));
         } catch (MlException e) {
             throw failed(refs, details, TemperatureForecastService.toApi(e, "shelf-life estimate"));
@@ -190,7 +188,7 @@ public class ShelfLifeService {
     private ProductDocument activeProduct(String id) {
         ProductDocument product = products.findById(id).filter(p -> p.status() == ProductStatus.ACTIVE)
                 .orElseThrow(() -> ApiException.notFound("PRODUCT_NOT_FOUND", "No product with id " + id + "."));
-        if (!SUPPORTED_CATEGORY.equals(product.category())) {
+        if (!ProductService.SUPPORTED_CATEGORY.equals(product.category())) {
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "UNSUPPORTED_CATEGORY", "Category not supported",
                     "Shelf life can only be estimated for fresh poultry in aerobic storage, not '"
                             + product.category() + "'.");

@@ -15,6 +15,7 @@ import edu.northeastern.cs5010.backend.inference.MlDtos;
 import edu.northeastern.cs5010.backend.inference.MlException;
 import edu.northeastern.cs5010.backend.product.ProductDocument;
 import edu.northeastern.cs5010.backend.product.ProductRepository;
+import edu.northeastern.cs5010.backend.product.ProductService;
 import edu.northeastern.cs5010.backend.product.ProductStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,7 +69,7 @@ class ShelfLifeServiceTest {
     }
 
     private static ProductDocument linked() {
-        return product(ShelfLifeService.SUPPORTED_CATEGORY, new ProductDocument.TemperatureSource(DATASET,
+        return product(ProductService.SUPPORTED_CATEGORY, new ProductDocument.TemperatureSource(DATASET,
                 "SENSOR02", "2024-09-08T18:05:00", "2024-09-08T20:04:00"), ProductStatus.ACTIVE);
     }
 
@@ -113,7 +114,7 @@ class ShelfLifeServiceTest {
         MlDtos.ShelfLifeRequest request = sent.getValue();
         assertThat(request.category()).isEqualTo("FRESH_POULTRY_AEROBIC");
         assertThat(request.initialLogCount()).isEqualTo(2.5);
-        assertThat(request.physiologicalStateAlpha0()).isEqualTo(ShelfLifeService.DEFAULT_ALPHA0);
+        assertThat(request.physiologicalStateAlpha0()).isEqualTo(ProductService.DEFAULT_ALPHA0);
         assertThat(request.futureTemperatureC()).isEqualTo(4.0);
         assertThat(request.intervalMinutes()).isEqualTo(1);
         assertThat(request.history()).hasSize(120);
@@ -210,7 +211,7 @@ class ShelfLifeServiceTest {
                 () -> service.estimate(new ShelfLife.Request("missing", null))).code())
                 .isEqualTo("PRODUCT_NOT_FOUND");
 
-        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(ShelfLifeService.SUPPORTED_CATEGORY,
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(ProductService.SUPPORTED_CATEGORY,
                 linked().temperatureSource(), ProductStatus.DELETED)));
         assertThat(catchThrowableOfType(ApiException.class,
                 () -> service.estimate(new ShelfLife.Request(PRODUCT, null))).code())
@@ -222,7 +223,7 @@ class ShelfLifeServiceTest {
                 () -> service.estimate(new ShelfLife.Request(PRODUCT, null))).code())
                 .isEqualTo("UNSUPPORTED_CATEGORY");
 
-        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(ShelfLifeService.SUPPORTED_CATEGORY, null,
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(ProductService.SUPPORTED_CATEGORY, null,
                 ProductStatus.ACTIVE)));
         ApiException notLinked = catchThrowableOfType(ApiException.class,
                 () -> service.estimate(new ShelfLife.Request(PRODUCT, null)));

@@ -78,7 +78,10 @@ Our check: with the published b = 0.022, exponential growth from 2 to 7 log give
 
 ## Retrieval instructions
 
-No dataset download is needed for Module 2. The parameters above are the only external inputs and will be stored in a versioned configuration file under `services/ml` during M6 (#33/#34), with the citation.
+No dataset download is needed for the poultry model. Its versioned parameters and citation
+are implemented in `services/ml/src/cold_storage_ml/shelf_life.py`; see
+`shelf_life.md` for evaluation commands. A separately proposed beef dataset is
+recorded in `beef_dataset_assessment.md`; it is not used by the poultry implementation.
 
 To reproduce the Mendeley inspection:
 

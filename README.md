@@ -1,6 +1,6 @@
 # Smart Cold Storage Monitor
 
-Smart Cold Storage Monitor is a local desktop application for cold-storage managers who need to monitor historical temperature conditions and identify possible temperature excursions before they occur. Users can upload sensor CSV datasets, inspect processed measurements, and request short-term temperature forecasts and predictive threshold warnings. The system uses a **JavaFX** desktop UI, a **Spring Boot** REST backend, a **Python FastAPI** forecasting service, and **MongoDB** for application metadata, prediction records, and audit logs. The second module, food spoilage-risk and remaining shelf-life estimation, is partly implemented: the backend product and shelf-life APIs are done, while the ML shelf-life endpoint and its desktop screens are still in progress.
+Smart Cold Storage Monitor is a local desktop application for cold-storage managers who need to monitor historical temperature conditions and identify possible temperature excursions before they occur. Users can upload sensor CSV datasets, inspect processed measurements, and request short-term temperature forecasts and predictive threshold warnings. The system uses a **JavaFX** desktop UI, a **Spring Boot** REST backend, a **Python FastAPI** forecasting service, and **MongoDB** for application metadata, prediction records, and audit logs. The second module, food spoilage-risk and remaining shelf-life estimation, has backend product APIs and a Python poultry growth-model endpoint; its desktop screens are still in progress. The poultry method is a published model, not trained ML; see [implementation and evaluation](docs/shelf_life.md). The proposed beef ML dataset is [assessed separately](docs/beef_dataset_assessment.md).
 
 ## Team
 
@@ -387,10 +387,10 @@ Statuses compare the code on this branch with the **Phase 1 SRS functional requi
 | FR-9: Evaluate the forecasting model against persistence on held-out data | Partial | Validation results in [`docs/model_baseline.md`](docs/model_baseline.md) and [`docs/model_improvement_experiment.md`](docs/model_improvement_experiment.md); the held-out test run waits until the models are frozen |
 | FR-10: Create, edit, and delete product profiles | Partial | Backend API complete: `product/ProductController`, `ProductService` (`/api/v1/products`); desktop product screen not built yet |
 | FR-11: Link a product to a dataset and time range | Partial | Backend complete: `ProductService.checkSource` validates the dataset, sensor, and window; desktop screen not built yet |
-| FR-12: Compute exposure features (time above 4 °C, peak, cumulative exposure) | Partial | Backend sends the product's one-minute window and stores the returned factors (`prediction/ShelfLifeService`); the ML shelf-life endpoint is not implemented yet |
-| FR-13: Return a risk level and remaining shelf life in hours | Partial | `POST /api/v1/predictions/shelf-life` in `PredictionController` and `ShelfLifeService` (saved and audited); depends on the ML shelf-life endpoint and the desktop Shelf Life screen |
+| FR-12: Compute exposure features (time above 4 °C, peak, cumulative exposure) | Implemented at API level | Python `shelf_life.py` calculates interpolated exposure/growth factors; backend sends and stores them; desktop display remains pending |
+| FR-13: Return a risk level and remaining shelf life in hours | Partial | Backend and Python shelf-life endpoints implemented using the published poultry model (not trained ML); desktop Shelf Life screen and full-stack review remain pending |
 | FR-14: List the main factors behind each estimate | Partial | Factors and model limitations are part of the `ShelfLife.Response`; not yet shown in the desktop app |
-| FR-15: Evaluate the Module 2 method against reference cases | Not started | Reference case defined in [`docs/api_contracts.md`](docs/api_contracts.md) (section 3, shelf-life example check) |
+| FR-15: Evaluate the Module 2 method against reference cases | Implemented reference checks | `test_shelf_life.py` and `evaluate_shelf_life.py` reproduce published cases and compare a fixed 4 C baseline; not held-out dataset accuracy |
 | FR-16: Save every prediction and show it in the prediction history | Partial | `PredictionHistory`, `PredictionController` save and list both forecast and shelf-life results; `PredictionHistoryView` reopens forecasts only |
 | FR-17: Audit uploads, deletions, product changes, predictions, warnings, and errors | Complete | `audit/AuditService`, `AuditEventType`; FastAPI `services/ml/src/cold_storage_ml/audit.py` |
 | FR-18: Each audit record has time, event type, source, affected IDs, outcome, and details | Complete | `audit/AuditRecord` |
@@ -412,7 +412,7 @@ The project is tracked across ten milestones. See [PROJECT_TIMELINE.md](PROJECT_
 | M3 | Local Application and Dataset Workflow | Nov 8, 2026 | ✅ Implemented |
 | M4 | Java-to-Python Inference Integration | Nov 12, 2026 | ✅ Implemented |
 | M5 | Temperature Forecasting Model | Nov 19, 2026 | ✅ Implemented |
-| M6 | Spoilage and Shelf-Life Model | Nov 22, 2026 | 🟡 In progress. Backend shelf-life and product APIs are done; the ML shelf-life endpoint is pending. |
+| M6 | Spoilage and Shelf-Life Model | Nov 22, 2026 | 🟡 In progress. Backend and Python poultry APIs implemented; published-reference checks available. No trained spoilage ML model or beef integration. |
 | M7 | Complete Two-Module Application | Nov 29, 2026 | 🟡 In progress. Prediction History and Audit Log screens are done; product and Shelf Life screens are pending. |
 | M8 | Automated QA and Held-Out Evaluation | Dec 6, 2026 | 🟡 In progress. Held-out evaluation and latency measurements pending. |
 | M9 | End-to-End Validation and Release Candidate | Dec 13, 2026 | ⚪ Not Started |
@@ -428,7 +428,7 @@ The project is tracked across ten milestones. See [PROJECT_TIMELINE.md](PROJECT_
 4. The backend saves the prediction and its audit events, and the desktop shows the forecasts, warnings, and actual readings.
 5. **Prediction History** reopens the saved forecast, and **Audit Log** shows the Spring Boot and FastAPI events.
 
-**Shelf-life estimation (Module 2)** works from the backend API down: a product created through `/api/v1/products` and linked to a dataset window can be estimated through `/api/v1/predictions/shelf-life`, and the result is saved, audited, and listed in the prediction history API. It still needs the ML shelf-life endpoint and the desktop screens.
+**Shelf-life estimation (Module 2)** has backend product/history integration and the Python `/api/v1/predictions/shelf-life` endpoint. The Python endpoint implements the published poultry model without forecasting artifacts; see [commands and limitations](docs/shelf_life.md). Desktop screens and a fresh-stack integration review are still needed.
 
 ## Scope and Design Changes Since Phase 1
 
@@ -480,7 +480,7 @@ Examples come from the implemented dataset, forecasting, shelf-life, product, pr
 
 The repository uses **JUnit 5, Mockito, and AssertJ** for Java and **pytest** for Python. GitHub Actions runs every suite on each push and pull request ([ci.yml](.github/workflows/ci.yml)).
 
-- **Unit tests:** 92 Java tests (11 desktop, 81 backend) and 75 Python tests, all passing. They cover CSV parsing and resampling, the forecast and shelf-life services, product rules, audit writing, the desktop HTTP client and form rules, and the ML preprocessing, models, inference, warnings, and audit events.
+- **Unit tests:** 92 Java tests (11 desktop, 81 backend) and 115 Python tests. They cover CSV parsing and resampling, the forecast and shelf-life services, product rules, audit writing, the desktop HTTP client and form rules, and the ML preprocessing, models, inference, warnings, and audit events. Poultry tests include published-reference reproduction, lag carryover, short-gap interpolation, and invalid inputs.
 - **Integration tests:** `DatasetWorkflowIntegrationTest` runs the backend against a real MongoDB (Testcontainers) for the dataset upload and delete workflow, forecast and shelf-life prediction history, the product create/edit/delete workflow with version checks, and the audit API. `MlClientContractTest` checks the backend against the versioned API examples in [`docs/contracts/examples`](docs/contracts/examples), and `MinuteResamplerTest` checks Java against the Python preprocessing on a shared fixture.
 - **Coverage:** not measured yet; adding JaCoCo and pytest-cov reports is part of M8.
 
@@ -493,7 +493,7 @@ On Windows use `.\mvnw.cmd` and `.\.venv\Scripts\python.exe`. Without Docker, th
 
 ## Known Issues
 
-- The ML service has no shelf-life endpoint yet, so `POST /api/v1/predictions/shelf-life` returns a prediction-service error outside the tests.
+- Shelf-life uses a published poultry growth model, not trained ML; no beef model is integrated, and fresh-stack shelf-life verification remains pending.
 - The desktop app has no product or Shelf Life screen yet, and Prediction History cannot reopen shelf-life results.
 - The forecast screen shows a table but not the line chart required by FR-7.
 - Forecasts support only SENSOR01, SENSOR02, and SENSOR04, the sensors the models were trained on.
@@ -502,7 +502,7 @@ On Windows use `.\mvnw.cmd` and `.\.venv\Scripts\python.exe`. Without Docker, th
 
 ## Next Steps
 
-- Add the ML shelf-life endpoint and the desktop product and Shelf Life screens, then let Prediction History reopen shelf-life results.
+- Add the desktop product and Shelf Life screens, then let Prediction History reopen shelf-life results.
 - Add the forecast line chart.
 - Freeze the models, run the held-out evaluation for both modules, and measure end-to-end latency.
 - Add coverage reports and end-to-end failure tests (ML service or MongoDB unavailable).
@@ -514,7 +514,7 @@ On Windows use `.\mvnw.cmd` and `.\.venv\Scripts\python.exe`. Without Docker, th
 
 | Member | Contributions |
 |---|---|
-| **Zi Ye** | Trained the spoilage prediction model and integrated it into the application’s prediction workflow. |
+| **Zi Ye** | Implemented the published poultry growth-model endpoint, exposure factors, validation, and reference checks; this is not a trained spoilage ML model. |
 | **Leyang Pan** | Implemented audit logging for temperature forecasts, built the JavaFX Audit Log and Prediction History screens, and connected both screens to the Spring Boot APIs. |
 | **Bo Sun** | Built the product API (create, edit, soft delete, temperature links with version checks) and the shelf-life prediction endpoint with saving, auditing, and product names in prediction history; wrote their unit and MongoDB integration tests. |
 

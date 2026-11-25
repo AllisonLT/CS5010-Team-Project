@@ -10,6 +10,7 @@ import math
 from cold_storage_ml.inference import ForecastRequest, ForecastService, artifact_root
 from cold_storage_ml.alert_policy import AlertRegistry
 from cold_storage_ml.audit import AuditedRoute, audit_lifespan
+from cold_storage_ml.shelf_life import ShelfLifeRequest, estimate_shelf_life
 
 app = FastAPI(title="Smart Cold Storage Monitor ML", version="0.1.0", lifespan=audit_lifespan)
 audited = APIRouter(route_class=AuditedRoute)
@@ -106,6 +107,19 @@ def evaluate_alert(payload: ForecastRequest, request: Request) -> dict:
     if status["event"] in {"raised", "escalated"}:
         request.state.audit_warning = {"level": status["severity"], "event": status["event"]}
     return {"forecast": forecast, "alert": status}
+
+
+@audited.post("/api/v1/predictions/shelf-life")
+def predict_shelf_life(payload: ShelfLifeRequest, request: Request) -> dict:
+    request.state.audit_details = {
+        "category": payload.category,
+        "historyStart": payload.history[0].timestamp,
+        "historyEnd": payload.history[-1].timestamp,
+    }
+    try:
+        return estimate_shelf_life(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 app.include_router(audited)

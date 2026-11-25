@@ -2,6 +2,9 @@
 
 ## Scope and compatibility
 
+- The poultry endpoint `POST /api/v1/predictions/shelf-life` is documented in
+  [shelf_life.md](shelf_life.md). It uses a published growth model, not trained ML,
+  and works without forecasting artifacts.
 - Existing route `GET /api/v1/health` remains unchanged.
 - New routes: `GET /api/v1/ready`, `POST /api/v1/predictions/temperature`, `POST /api/v1/alerts/current`, `POST /api/v1/alerts/evaluate`.
 - This is local-only, model-backed Python inference. No modifications to the JavaFX or Spring Boot modules are included. Backend team should agree on JSON field names and timestamp/unit policy before integration.

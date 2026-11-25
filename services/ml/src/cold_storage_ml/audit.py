@@ -84,7 +84,8 @@ class AuditedRoute(APIRoute):
 
     def get_route_handler(self):
         handler = super().get_route_handler()
-        group = "ML_INFERENCE" if self.path.endswith("/temperature") else "ML_ALERT_CHECK"
+        group = ("ML_INFERENCE" if self.path.endswith(("/temperature", "/shelf-life"))
+                 else "ML_ALERT_CHECK")
 
         async def audited(request: Request):
             writer = getattr(request.app.state, "audit", None)
